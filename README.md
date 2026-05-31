@@ -232,7 +232,7 @@ result = await ms.workflows.science_landscape(
 
 **实际案例 — Nature Communications LLM 论文全景分析（2025-2026）：**
 
-完整报告见 [`metasci_outputs/analysis/nature_communications_llm_2025_2026_science_landscape/`](metasci_outputs/analysis/nature_communications_llm_2025_2026_science_landscape/outputs/nc-llm-2025-2026-science-landscape.md)
+完整报告会生成到本地 `metasci_outputs/analysis/nature_communications_llm_2025_2026_science_landscape/`。
 
 ---
 
