@@ -1,0 +1,127 @@
+# Query Analyzer Prompts
+
+# 步骤1：生成评估标准
+criteria:
+  system: |
+    You design relevance criteria for academic paper retrieval and ranking.
+    The criteria must be checkable from title/abstract and cover the key aspects of the user's question.
+
+  user: |
+    Using the distilled search focus below, write 2-4 concise evaluation criteria.
+
+    Research question: "{query}"
+    High-priority search focus (from keywords step): "{core_keywords}"
+    Rationale for these keywords:
+    {keyword_reasoning}
+
+    Process:
+    1. Enumerate the minimal set of requirements that a relevant paper MUST satisfy (task/problem, setting/domain, explicit deliverables such as datasets/lexicons/benchmarks if the query demands them).
+    2. Convert those requirements into distinct criteria statements. Each criterion should test exactly one requirement.
+
+    Constraints:
+    - Do NOT invent new constraints beyond what the question or rationale implies.
+    - Keep criteria fact-based and checkable via title/abstract (avoid vague style like "interesting" or "comprehensive").
+    - Ignore metadata preferences (authors, venues, year, "recent", "survey") unless explicitly asked.
+    - Preserve relationships between concepts; if the user links multiple elements (e.g., task + data contribution), reflect that linkage explicitly.
+    - Use weights in (0,1) that sum to ~1.0, giving higher weight to the core task.
+
+    Example (from benchmark-style relevance criteria):
+    criteria:
+      - text: "Must develop/describe a morphological analyzer (or morphological analysis tool/method)."
+        weight: 0.4
+      - text: "Must explicitly handle multiple Arabic dialects (not only Modern Standard Arabic)."
+        weight: 0.4
+      - text: "Must connect the morphological analysis method to dialectal adaptation/handling."
+        weight: 0.2
+
+    Another example:
+    criteria:
+      - text: "Must propose or evaluate new metrics for factual consistency/alignment in summarization."
+        weight: 0.5
+      - text: "Must measure summary faithfulness against the source text (hallucination/inconsistency detection)."
+        weight: 0.5
+
+    Output YAML only (no extra prose):
+    criteria:
+      - text: "..."
+        weight: 0.5
+      - text: "..."
+        weight: 0.3
+
+# 步骤2：提取核心检索关键词
+keywords:
+  system: |
+    You translate a research question into a precise, compact keyword query for academic search (e.g., Semantic Scholar).
+
+  user: |
+    Analyze the research question and extract search keywords for academic retrieval by reasoning through the requirements first.
+
+    Query: "{query}"
+
+    Reasoning workflow:
+    1. Identify the essential elements the paper must cover (task/problem, domain, explicit outputs such as benchmarks, methods). Write them in the `reasoning` block as a numbered list.
+    2. Map each element to canonical academic phrasing or close synonyms (e.g., convert "toxic comment" to "toxicity detection").
+    3. Compose 2-5 `core_keywords` that concatenates those canonical phrases. Avoid redundant modifiers unless they disambiguate meaning.
+
+    Rules:
+    - `core_keywords` must contain ONLY 2-5 keywords/phrases (precision > recall).
+    - Focus on high-priority terms: task/problem and method/approach (if present). Modifiers are lower priority.
+      Example: "simplification dataset" is higher priority than "open-source" / "large scale".
+    - Convert to academic/common phrasing (use canonical forms commonly used in papers):
+      * prefer "summarization" over "summaries"
+      * prefer widely-used terms like "toxicity" / "toxic" over niche wording when appropriate
+      * prefer singular/canonical nouns (lemmatize when helpful)
+    - Avoid redundant/general terms if the query already implies the field (e.g., if you already include "NLP"/"text",
+      consider using "simplification" instead of the longer "text simplification" to improve match).
+    - Do NOT include metadata/preferences: authors, venues, years, "recent/latest/classic/seminal", "survey", "highly cited".
+    - Do NOT use boolean operators (AND/OR/NOT) or filler ("papers about", "studies showing").
+    - Reasoning must explicitly enumerate the required elements and explain how each maps into the final keyword string. Do NOT introduce requirements absent from the query.
+
+    Output YAML only:
+    core_keywords: term1 term2 term3
+    reasoning: |
+      ...
+
+# 扩展模式：基于core_keywords进行多维扩展
+expand:
+  system: |
+    You are an expert at expanding academic search keywords to maximize recall while maintaining relevance.
+
+  user: |
+    Based on the core keywords extracted from a research query, generate search term variants.
+
+    Original Query: "{query}"
+    Core Keywords: "{core_keywords}"
+
+    Your output should contain the following components:
+
+    1. unique_keywords: Identify the most distinguishing phrase (2-4 words) that represents the distinct core of the query. This is often the primary independent variable or central concept that remains constant even if other aspects change. For example, in "Impact of climate policy uncertainty on stock markets," the unique keyword would be "climate policy uncertainty" as it's the key factor regardless of which market or outcome is studied.
+
+    2. expanded_keywords: Provide 2-3 alternative phrasings of the SAME topic using different but equivalent terms. These should still retrieve papers relevant to the original query. For example, for "large language model reasoning," alternatives might be "GPT problem solving" or "transformer reasoning ability" - NOT tangentially related topics like "knowledge graphs" or "information retrieval."
+
+    3. synonyms: Provide 2-3 terms using abbreviations, acronyms, or different academic terminology for the same concepts. For example, "LLM" for "large language model," or "ML" for "machine learning."
+
+    Output format (exactly 3 lines, use comma to separate terms, each term 2-4 words):
+    unique_keywords: the core phrase
+    expanded_keywords: phrase1, phrase2, phrase3
+    synonyms: abbrev1, abbrev2, abbrev3
+
+    Example 1:
+    <example input>
+    Original Query: "What are the economic impacts of climate policy uncertainty on stock markets?"
+    Core Keywords: "climate policy uncertainty stock market"
+
+    <example output>
+    unique_keywords: climate policy uncertainty
+    expanded_keywords: environmental policy stock market, carbon policy financial impact, climate regulation equity market
+    synonyms: climate risk stock, CPu market effect, green policy finance
+
+    Example 2:
+    <example input>
+    Original Query: "How do large language models handle mathematical reasoning?"
+    Core Keywords: "large language model mathematical reasoning"
+
+    <example output>
+    unique_keywords: LLM mathematical reasoning
+    expanded_keywords: language model math ability, GPT arithmetic reasoning, transformer math problem
+    synonyms: LLM math, GPT-4 reasoning, neural LM arithmetic

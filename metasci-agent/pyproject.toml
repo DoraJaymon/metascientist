@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metasci-agent"
+version = "0.1.0"
+description = "Thin light-agent adapters for MetaSci Universe."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "metasci-universe",
+  "light-agent",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+metasci-agent = "metasci_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

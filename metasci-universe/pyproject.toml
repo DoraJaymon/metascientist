@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metasci-universe"
+version = "0.1.0"
+description = "Agent-native meta-science data acquisition package."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "click>=8.0",
+  "httpx[socks]>=0.27",
+  "bertopic>=0.16",
+  "networkx>=3.0",
+  "numpy>=1.26",
+  "pandas>=2.0",
+  "plotly>=5.0",
+  "pycountry>=24.6",
+  "pydantic>=2.0",
+  "python-dotenv>=1.0",
+  "scikit-learn>=1.4",
+  "sentence-transformers>=2.7",
+  "spacy>=3.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+metasci = "metasci_universe.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

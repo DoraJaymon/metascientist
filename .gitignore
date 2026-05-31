@@ -1,0 +1,58 @@
+.env
+.env.*
+!.env.example
+
+# Local agent/editor state
+.agents/
+.codex
+.claude/
+.vscode/
+.idea/
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Project runtime outputs and caches
+dev_outputs/
+metasci_outputs/
+analysis_output/
+data_cache/
+outputs/
+metasci-universe/metasci_outputs/
+
+# Internal notes and draft documentation
+/dev_docs/
+/docs/
+
+# Local papers and copyrighted PDFs
+target_paper/
+mid_papers/
+*.pdf
+
+# Internal research/dev workspaces
+AnalyingPapers/
+external/
+resources/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
