@@ -6,6 +6,7 @@
 .agents/
 .codex
 .claude/
+.git-meta/
 .vscode/
 .idea/
 
