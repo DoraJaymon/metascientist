@@ -275,7 +275,13 @@ result = await ms.workflows.science_landscape(
 
 ```bash
 # 1. 安装核心包
-cd metasci-universe && pip install -e .
+pip install metasci-universe
+
+# 如果需要运行下面的 science_landscape 分析工作流，安装分析能力
+pip install "metasci-universe[analysis]"
+
+# 本仓库开发模式可用：
+# cd metasci-universe && pip install -e ".[analysis]"
 
 # 2. 加载 skills（Claude Code）
 cp -r metasci-skills/skills/* ~/.claude/skills/
@@ -299,6 +305,17 @@ EOF
 # 5. 在 Claude Code 中用自然语言驱动全流水线
 # 直接对话："/metasci-data-fetch 获取 ACL 2024 论文，然后生成全景报告"
 ```
+
+安装层级：
+
+| 安装命令 | 适用场景 |
+|----------|----------|
+| `pip install metasci-universe` | 只做数据获取、作者/论文/会议/引用查询 |
+| `pip install "metasci-universe[analysis]"` | 常规文献计量、宏观、作者、主题、引用分析 |
+| `pip install "metasci-universe[embeddings]"` | 需要本地 sentence-transformers 向量与语义聚类 |
+| `pip install "metasci-universe[all]"` | 全功能，包括 BERTopic、HDBSCAN、spaCy 等重后端 |
+
+默认分析配置使用轻量的 sklearn 分词与 LDA；只有显式选择 embedding 或 BERTopic 后端时，才需要安装更重的 extras。
 
 ---
 
