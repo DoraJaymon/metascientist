@@ -21,6 +21,13 @@ Use `metasci-data-fetch` for:
 - saved works dataset inspection
 - author candidate search, disambiguation, profiles, and DOI/work authorships
 
+Use `metasci-citation-lookup` for:
+
+- resolving one paper and finding its direct references or citing papers
+- citation lookup from title, DOI, arXiv ID, OpenAlex ID, S2 ID, or S2 Corpus ID
+- one-paper backward/forward citation checks with OpenAlex-first retrieval and
+  Semantic Scholar fallback/supplement
+
 Use `metasci-analysis` for:
 
 - analysis of an existing saved works dataset

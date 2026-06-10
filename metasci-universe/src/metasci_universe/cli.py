@@ -353,6 +353,146 @@ def authors_from_work_cmd(
 
 
 @main.group()
+def citations() -> None:
+    """Citation graph lookup commands."""
+
+
+def _citation_identity_options(func):
+    func = click.option("--s2-corpus-id")(func)
+    func = click.option("--s2-id")(func)
+    func = click.option("--openalex-id")(func)
+    func = click.option("--arxiv-id")(func)
+    func = click.option("--doi")(func)
+    func = click.option("--title")(func)
+    return func
+
+
+@citations.command("resolve")
+@_citation_identity_options
+@click.option("--provider", type=click.Choice(["auto", "openalex"]), default="auto", show_default=True)
+@click.option("--output", "output_path", type=click.Path(dir_okay=False, path_type=Path))
+@click.option("--json", "as_json", is_flag=True)
+def citations_resolve_cmd(
+    title: str | None,
+    doi: str | None,
+    arxiv_id: str | None,
+    openalex_id: str | None,
+    s2_id: str | None,
+    s2_corpus_id: str | None,
+    provider: str,
+    output_path: Path | None,
+    as_json: bool,
+) -> None:
+    """Resolve a paper identity across citation providers."""
+    from metasci_universe.api import citations as citations_api
+
+    try:
+        result = _run(
+            citations_api.resolve(
+                title=title,
+                doi=doi,
+                arxiv_id=arxiv_id,
+                openalex_id=openalex_id,
+                s2_id=s2_id,
+                s2_corpus_id=s2_corpus_id,
+                provider=provider,
+            )
+        )
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+    _emit_result(result, as_json=as_json, output_path=output_path)
+
+
+@citations.command("lookup")
+@_citation_identity_options
+@click.option("--provider", type=click.Choice(["auto", "openalex"]), default="auto", show_default=True)
+@click.option("--limit", type=int, default=1000, show_default=True)
+@click.option("--year-start", type=int)
+@click.option("--year-end", type=int)
+@click.option("--min-citations", type=int, default=0, show_default=True)
+@click.option("--output", "output_path", type=click.Path(dir_okay=False, path_type=Path))
+@click.option("--json", "as_json", is_flag=True)
+def citations_lookup_cmd(
+    title: str | None,
+    doi: str | None,
+    arxiv_id: str | None,
+    openalex_id: str | None,
+    s2_id: str | None,
+    s2_corpus_id: str | None,
+    provider: str,
+    limit: int,
+    year_start: int | None,
+    year_end: int | None,
+    min_citations: int,
+    output_path: Path | None,
+    as_json: bool,
+) -> None:
+    """Resolve a paper and fetch references, citing papers, or both."""
+    from metasci_universe.api import citations as citations_api
+
+    try:
+        result = _run(
+            citations_api.lookup(
+                title=title,
+                doi=doi,
+                arxiv_id=arxiv_id,
+                openalex_id=openalex_id,
+                s2_id=s2_id,
+                s2_corpus_id=s2_corpus_id,
+                provider=provider,
+                limit=limit,
+                year_start=year_start,
+                year_end=year_end,
+                min_citations=min_citations,
+            )
+        )
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+    _emit_result(result, as_json=as_json, output_path=output_path)
+
+
+@citations.command("refs")
+@_citation_identity_options
+@click.option("--provider", type=click.Choice(["auto", "openalex"]), default="auto", show_default=True)
+@click.option("--limit", type=int, default=1000, show_default=True)
+@click.option("--output", "output_path", type=click.Path(dir_okay=False, path_type=Path))
+@click.option("--json", "as_json", is_flag=True)
+def citations_refs_cmd(**kwargs: Any) -> None:
+    """Fetch works referenced by a paper."""
+    from metasci_universe.api import citations as citations_api
+
+    as_json = kwargs.pop("as_json")
+    output_path = kwargs.pop("output_path")
+    try:
+        result = _run(citations_api.references(**kwargs))
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+    _emit_result(result, as_json=as_json, output_path=output_path)
+
+
+@citations.command("citing")
+@_citation_identity_options
+@click.option("--provider", type=click.Choice(["auto", "openalex"]), default="auto", show_default=True)
+@click.option("--limit", type=int, default=1000, show_default=True)
+@click.option("--year-start", type=int)
+@click.option("--year-end", type=int)
+@click.option("--min-citations", type=int, default=0, show_default=True)
+@click.option("--output", "output_path", type=click.Path(dir_okay=False, path_type=Path))
+@click.option("--json", "as_json", is_flag=True)
+def citations_citing_cmd(**kwargs: Any) -> None:
+    """Fetch works that cite a paper."""
+    from metasci_universe.api import citations as citations_api
+
+    as_json = kwargs.pop("as_json")
+    output_path = kwargs.pop("output_path")
+    try:
+        result = _run(citations_api.citations(**kwargs))
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+    _emit_result(result, as_json=as_json, output_path=output_path)
+
+
+@main.group()
 def dataset() -> None:
     """Saved dataset output commands."""
 

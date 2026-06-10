@@ -9,6 +9,10 @@ def test_tool_registry_lists_phase_1_tools() -> None:
     assert "authors.search" in tools
     assert "authors.profile" in tools
     assert "authors.from_work" in tools
+    assert "citations.resolve" in tools
+    assert "citations.lookup" in tools
+    assert "citations.references" in tools
+    assert "citations.citations" in tools
     assert "conferences.papers" in tools
     assert "embeddings.embed_works" in tools
     assert "dataset.info" in tools
@@ -23,3 +27,7 @@ def test_tool_schema_is_introspectable() -> None:
     card = describe_tool("authors.search")
     assert card["name"] == "authors.search"
     assert "inputs" in card
+
+    citation_schema = tool_schema("citations.lookup")
+    assert "openalex_id" in citation_schema["properties"]
+    assert "direction" not in citation_schema["properties"]

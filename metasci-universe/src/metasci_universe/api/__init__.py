@@ -1,5 +1,5 @@
 """Human-facing data APIs."""
 
-from . import authors, conferences, works
+from . import authors, citations, conferences, works
 
-__all__ = ["authors", "conferences", "works"]
+__all__ = ["authors", "citations", "conferences", "works"]

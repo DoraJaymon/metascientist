@@ -23,3 +23,11 @@ def test_cli_conference_papers_accepts_new_sources() -> None:
     assert result.exit_code == 0
     assert "--source-collection-id" in result.output
     assert "pmlr" in result.output
+
+
+def test_cli_citations_help() -> None:
+    result = CliRunner().invoke(main, ["citations", "lookup", "--help"])
+    assert result.exit_code == 0
+    assert "--openalex-id" in result.output
+    assert "--s2-id" in result.output
+    assert "--direction" not in result.output

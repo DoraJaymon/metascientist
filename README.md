@@ -18,6 +18,7 @@ metascientist/
 │
 ├── metasci-skills/       # 🛠️ 跨平台 Skills（Claude Code / Codex CLI 均可直接加载）
 │   ├── metasci-data-fetch      #  数据检索与实体消歧
+│   ├── metasci-citation-lookup #  单篇论文引用 / 被引追踪
 │   ├── metasci-analysis        #  分析、建模、可视化
 │   └── metasci-report-writer   #  结构化报告撰写
 │
@@ -68,13 +69,19 @@ metascientist/
 
 ### 🛠️ metasci-skills — 多层次跨平台 Skills
 
-三条经过充分调试的 skill，覆盖从数据到报告的完整链路，可在 Claude Code、Codex CLI 等任意支持 skill 的平台直接加载使用：
+四条经过充分调试的 skill，覆盖从数据到报告的完整链路，可在 Claude Code、Codex CLI 等任意支持 skill 的平台直接加载使用：
 
 **`metasci-data-fetch`** 🔍 数据检索与实体消歧
 - 按关键词、主题、机构、年份等多维度检索论文
 - 直接拉取 NeurIPS / ICLR / ACL 等 20+ 顶会全量收录
 - 作者消歧与主页检索，支持 7 个来源交叉验证
 - 智能判断查询策略（keyword vs topic），推荐最优检索方式
+
+**`metasci-citation-lookup`** 🔗 单篇论文引用追踪
+- 根据 title / DOI / arXiv ID / OpenAlex ID / S2 ID 解析论文身份
+- 单独查询参考文献 `refs` 或被引论文 `citing`，避免不必要的 API 调用
+- 默认 OpenAlex 优先；当引用边缺失或明显不完整时，用 Semantic Scholar 补充
+- `lookup` 一次返回 references 与 citing papers，并在需要补充时协调两边结果
 
 **`metasci-analysis`** 📊 分析、建模与可视化
 - 自动判断数据集的分析适配性（preflight 预检），给出安全默认参数
@@ -179,6 +186,8 @@ result = await ms.run_tool("works.search", {"author_id": "A5023888391", "limit":
 "检索近三年量子计算领域的论文，需要包含作者和机构信息"
 
 "找到 Geoffrey Hinton 的所有论文，以及他的个人主页"
+
+"测试 CycleResearcher 这篇论文的引用关系"
 
 "拉取数学四大期刊 2010-2025 的全量文章"
 ```

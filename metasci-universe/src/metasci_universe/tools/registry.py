@@ -19,6 +19,7 @@ from metasci_universe.schemas.analysis import (
     TopicModelingRequest,
 )
 from metasci_universe.schemas.authors import AuthorProfileRequest, AuthorSearchRequest, WorkAuthorsRequest
+from metasci_universe.schemas.citations import CitationLookupRequest, CitationResolveRequest
 from metasci_universe.schemas.common import DatasetInfoRequest, MetaSciResult
 from metasci_universe.schemas.conferences import ConferencePapersRequest
 from metasci_universe.schemas.embeddings import EmbedWorksRequest
@@ -90,6 +91,34 @@ async def _authors_from_work(payload: dict[str, Any]) -> MetaSciResult:
 
     request = WorkAuthorsRequest(**payload)
     return await authors.from_work(**request.model_dump())
+
+
+async def _citations_resolve(payload: dict[str, Any]) -> MetaSciResult:
+    from metasci_universe.api import citations
+
+    request = CitationResolveRequest(**payload)
+    return await citations.resolve(**request.model_dump())
+
+
+async def _citations_lookup(payload: dict[str, Any]) -> MetaSciResult:
+    from metasci_universe.api import citations
+
+    request = CitationLookupRequest(**payload)
+    return await citations.lookup(**request.model_dump())
+
+
+async def _citations_references(payload: dict[str, Any]) -> MetaSciResult:
+    from metasci_universe.api import citations
+
+    request = CitationLookupRequest(**payload)
+    return await citations.references(**request.model_dump())
+
+
+async def _citations_citations(payload: dict[str, Any]) -> MetaSciResult:
+    from metasci_universe.api import citations
+
+    request = CitationLookupRequest(**payload)
+    return await citations.citations(**request.model_dump())
 
 
 async def _dataset_info(payload: dict[str, Any]) -> MetaSciResult:
@@ -481,6 +510,47 @@ TOOLS: dict[str, ToolDefinition] = {
         examples=[
             "await ms.run_tool('authors.from_work', {'identifier': '10.1038/s41597-020-0543-2', 'all_authors': True})",
         ],
+    ),
+    "citations.resolve": ToolDefinition(
+        name="citations.resolve",
+        description="Resolve one paper from title, DOI, arXiv ID, OpenAlex ID, or Semantic Scholar ID.",
+        input_model=CitationResolveRequest,
+        handler=_citations_resolve,
+        examples=[
+            "await ms.run_tool('citations.resolve', {'doi': '10.1038/s41586-020-2649-2'})",
+            "await ms.run_tool('citations.resolve', {'title': 'Attention Is All You Need'})",
+        ],
+        required_fields=["title or doi or arxiv_id or openalex_id or s2_id"],
+    ),
+    "citations.lookup": ToolDefinition(
+        name="citations.lookup",
+        description="Resolve one paper and fetch references, citing papers, or both.",
+        input_model=CitationLookupRequest,
+        handler=_citations_lookup,
+        examples=[
+            "await ms.run_tool('citations.lookup', {'openalex_id': 'W123', 'provider': 'auto', 'limit': 1000})",
+        ],
+        required_fields=["title or doi or arxiv_id or openalex_id or s2_id"],
+    ),
+    "citations.references": ToolDefinition(
+        name="citations.references",
+        description="Resolve one paper and fetch works that it references.",
+        input_model=CitationLookupRequest,
+        handler=_citations_references,
+        examples=[
+            "await ms.run_tool('citations.references', {'arxiv_id': '1706.03762', 'limit': 50})",
+        ],
+        required_fields=["title or doi or arxiv_id or openalex_id or s2_id"],
+    ),
+    "citations.citations": ToolDefinition(
+        name="citations.citations",
+        description="Resolve one paper and fetch works that cite it.",
+        input_model=CitationLookupRequest,
+        handler=_citations_citations,
+        examples=[
+            "await ms.run_tool('citations.citations', {'s2_id': '...', 'year_start': 2020, 'limit': 100})",
+        ],
+        required_fields=["title or doi or arxiv_id or openalex_id or s2_id"],
     ),
     "dataset.info": ToolDefinition(
         name="dataset.info",

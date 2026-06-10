@@ -5,7 +5,7 @@ from typing import Any
 
 from .tools.registry import describe_tool, list_tools, run_tool, tool_schema
 from .storage.saved_dataset import SavedDataset
-from .api import authors, conferences, works
+from .api import authors, citations, conferences, works
 
 Dataset = SavedDataset
 
@@ -14,6 +14,7 @@ __all__ = [
     "SavedDataset",
     "analysis",
     "authors",
+    "citations",
     "conferences",
     "embeddings",
     "memory",
