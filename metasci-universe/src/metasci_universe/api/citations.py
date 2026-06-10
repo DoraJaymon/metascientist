@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from difflib import SequenceMatcher
 from typing import Any
 
 import httpx
 
+from metasci_universe.providers.opencitations_api import OpenCitationsAPIProvider
 from metasci_universe.providers.openalex_api import OpenAlexAPIProvider
 from metasci_universe.providers.semantic_scholar_api import SemanticScholarAPIProvider, SemanticScholarPartialError
 from metasci_universe.schemas.citations import CitationLookupRequest, CitationResolveRequest
 from metasci_universe.schemas.common import MetaSciResult
+
+OPENALEX_WORK_SELECT = (
+    "id,doi,title,display_name,publication_year,cited_by_count,"
+    "primary_location,authorships,referenced_works"
+)
 
 
 def _compact_openalex_id(value: Any) -> Any:
@@ -43,6 +50,7 @@ def _normalize_arxiv(value: str | None) -> str | None:
     arxiv = re.sub(r"^https?://arxiv\.org/(abs|pdf)/", "", arxiv, flags=re.I)
     arxiv = re.sub(r"\.pdf$", "", arxiv, flags=re.I)
     arxiv = re.sub(r"^arxiv:", "", arxiv, flags=re.I)
+    arxiv = arxiv.split("?", 1)[0].split("#", 1)[0]
     return arxiv.strip() or None
 
 
@@ -115,13 +123,77 @@ def _normalize_s2_paper(paper: dict[str, Any] | None, *, provider: str = "semant
     }
 
 
+def _parse_opencitations_pids(value: str | None) -> dict[str, Any]:
+    parsed: dict[str, Any] = {}
+    if not value:
+        return parsed
+    for token in value.split():
+        if ":" not in token:
+            continue
+        scheme, raw = token.split(":", 1)
+        scheme = scheme.lower()
+        if scheme == "doi":
+            parsed["doi"] = _normalize_doi(raw)
+        elif scheme == "openalex":
+            parsed["openalex_id"] = _compact_openalex_id(raw)
+        elif scheme == "pmid":
+            parsed["pmid"] = raw
+        elif scheme == "omid":
+            parsed["omid"] = raw
+    return parsed
+
+
+def _normalize_opencitations_edge(edge: dict[str, Any], *, direction: str) -> dict[str, Any] | None:
+    pid_field = "cited" if direction == "references" else "citing"
+    pids = _parse_opencitations_pids(edge.get(pid_field))
+    if not pids:
+        return None
+    provider_ids = {
+        "openalex": pids.get("openalex_id"),
+        "opencitations": edge.get("oci"),
+        "omid": pids.get("omid"),
+        "pmid": pids.get("pmid"),
+    }
+    return {
+        "id": pids.get("openalex_id") or pids.get("doi") or pids.get("pmid") or pids.get("omid") or edge.get("oci"),
+        "openalex_id": pids.get("openalex_id"),
+        "s2_id": None,
+        "s2_corpus_id": None,
+        "doi": pids.get("doi"),
+        "arxiv_id": None,
+        "title": None,
+        "year": None,
+        "venue": None,
+        "authors": [],
+        "citation_count": 0,
+        "reference_count": 0,
+        "url": f"https://doi.org/{pids['doi']}" if pids.get("doi") else None,
+        "provider": "opencitations",
+        "provider_ids": {key: value for key, value in provider_ids.items() if value},
+        "opencitations_oci": edge.get("oci"),
+        "opencitations_creation": edge.get("creation"),
+    }
+
+
 def _merge_identity(primary: dict[str, Any] | None, secondary: dict[str, Any] | None) -> dict[str, Any] | None:
     if not primary:
         return secondary
     if not secondary:
         return primary
     merged = dict(primary)
-    for key in ("openalex_id", "s2_id", "s2_corpus_id", "doi", "arxiv_id", "title", "year", "venue", "url"):
+    for key in (
+        "openalex_id",
+        "s2_id",
+        "s2_corpus_id",
+        "doi",
+        "arxiv_id",
+        "pmid",
+        "omid",
+        "title",
+        "year",
+        "venue",
+        "url",
+    ):
         if not merged.get(key) and secondary.get(key):
             merged[key] = secondary[key]
     if not merged.get("authors") and secondary.get("authors"):
@@ -134,7 +206,7 @@ def _merge_identity(primary: dict[str, Any] | None, secondary: dict[str, Any] | 
 
 
 def _paper_key(paper: dict[str, Any]) -> str:
-    for key in ("doi", "openalex_id", "s2_id", "s2_corpus_id"):
+    for key in ("doi", "openalex_id", "s2_id", "s2_corpus_id", "pmid", "omid"):
         value = paper.get(key)
         if value:
             return f"{key}:{str(value).lower()}"
@@ -173,9 +245,11 @@ class CitationGraphService:
         self,
         *,
         openalex: OpenAlexAPIProvider | None = None,
+        opencitations: OpenCitationsAPIProvider | None = None,
         semantic_scholar: SemanticScholarAPIProvider | None = None,
     ) -> None:
         self.openalex = openalex or OpenAlexAPIProvider()
+        self.opencitations = opencitations or OpenCitationsAPIProvider()
         self.semantic_scholar = semantic_scholar or SemanticScholarAPIProvider()
 
     async def resolve(self, request: CitationResolveRequest) -> tuple[dict[str, Any] | None, list[str], dict[str, Any]]:
@@ -232,20 +306,50 @@ class CitationGraphService:
 
         openalex_reference_count = len(references)
         openalex_citation_count = len(citations)
+        opencitations_references: list[dict[str, Any]] = []
+        opencitations_citations: list[dict[str, Any]] = []
         s2_references: list[dict[str, Any]] = []
         s2_citations: list[dict[str, Any]] = []
-        supplement_directions = self._s2_supplement_directions(identity, request, references, citations, direction=direction)
-        if supplement_directions:
+        opencitations_directions = self._supplement_directions(
+            identity, request, references, citations, direction=direction
+        )
+        if opencitations_directions:
+            opencitations_identifier = self._opencitations_identifier_for_identity(identity)
+            if not opencitations_identifier:
+                diagnostics.append(
+                    f"OpenCitations supplement skipped for {', '.join(opencitations_directions)}: no DOI resolved."
+                )
+            else:
+                for supplement_direction in opencitations_directions:
+                    diagnostics.append(
+                        f"OpenCitations {supplement_direction} supplement triggered after OpenAlex returned "
+                        f"{len(references) if supplement_direction == 'references' else len(citations)} records."
+                    )
+                    opencitations_papers, opencitations_diag = await self._fetch_opencitations_edges(
+                        opencitations_identifier, request, direction=supplement_direction
+                    )
+                    diagnostics.extend(opencitations_diag)
+                    if supplement_direction == "references":
+                        opencitations_references = opencitations_papers
+                    else:
+                        opencitations_citations = opencitations_papers
+
+        pre_s2_references = _apply_filters(_merge_papers(references, opencitations_references), request)
+        pre_s2_citations = _apply_filters(_merge_papers(citations, opencitations_citations), request)
+        s2_directions = self._supplement_directions(
+            identity, request, pre_s2_references, pre_s2_citations, direction=direction
+        )
+        if s2_directions:
             s2_identifier = await self._s2_identifier_for_identity(identity, diagnostics)
             if not s2_identifier:
                 diagnostics.append(
-                    f"Semantic Scholar supplement skipped for {', '.join(supplement_directions)}: no S2 paper ID resolved."
+                    f"Semantic Scholar supplement skipped for {', '.join(s2_directions)}: no S2 paper ID resolved."
                 )
             else:
-                for supplement_direction in supplement_directions:
+                for supplement_direction in s2_directions:
                     diagnostics.append(
-                        f"Semantic Scholar {supplement_direction} supplement triggered after OpenAlex returned "
-                        f"{len(references) if supplement_direction == 'references' else len(citations)} records."
+                        f"Semantic Scholar {supplement_direction} supplement triggered after OpenAlex/OpenCitations returned "
+                        f"{len(pre_s2_references) if supplement_direction == 'references' else len(pre_s2_citations)} records."
                     )
                     s2_papers, s2_diag = await self._fetch_s2_edges(
                         s2_identifier, request, direction=supplement_direction
@@ -256,18 +360,22 @@ class CitationGraphService:
                     else:
                         s2_citations = s2_papers
 
-        references = _apply_filters(_merge_papers(references, s2_references), request)
-        citations = _apply_filters(_merge_papers(citations, s2_citations), request)
+        references = _apply_filters(_merge_papers(references, opencitations_references, s2_references), request)
+        citations = _apply_filters(_merge_papers(citations, opencitations_citations, s2_citations), request)
+        if identity.get("s2_id") or identity.get("s2_corpus_id"):
+            metadata["resolved_from"] = sorted({*(metadata.get("resolved_from") or []), "semantic_scholar"})
 
         if direction in ("references", "both"):
             provider_counts["references"] = {
                 "openalex": openalex_reference_count,
+                "opencitations": len(opencitations_references),
                 "semantic_scholar": len(s2_references),
                 "merged": len(references),
             }
         if direction in ("citations", "both"):
             provider_counts["citations"] = {
                 "openalex": openalex_citation_count,
+                "opencitations": len(opencitations_citations),
                 "semantic_scholar": len(s2_citations),
                 "merged": len(citations),
             }
@@ -331,7 +439,56 @@ class CitationGraphService:
             diagnostics.append(f"Semantic Scholar {direction} supplement failed: {exc}")
             return [], diagnostics
 
-    def _s2_supplement_directions(
+    async def _fetch_opencitations_edges(
+        self,
+        identifier: str,
+        request: CitationLookupRequest,
+        *,
+        direction: str,
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        diagnostics: list[str] = []
+        try:
+            raw = (
+                await self.opencitations.references(identifier)
+                if direction == "references"
+                else await self.opencitations.citations(identifier)
+            )
+        except httpx.HTTPError as exc:
+            diagnostics.append(f"OpenCitations {direction} supplement failed: {exc}")
+            return [], diagnostics
+
+        papers = [
+            paper
+            for paper in (_normalize_opencitations_edge(item, direction=direction) for item in raw[: request.limit])
+            if paper
+        ]
+        return await self._enrich_opencitations_papers(papers, request), diagnostics
+
+    async def _enrich_opencitations_papers(
+        self, papers: list[dict[str, Any]], request: CitationLookupRequest
+    ) -> list[dict[str, Any]]:
+        if not papers:
+            return []
+
+        openalex_ids = [paper["openalex_id"] for paper in papers if paper.get("openalex_id")]
+        doi_values = [
+            paper["doi"] for paper in papers if paper.get("doi") and not paper.get("openalex_id")
+        ]
+        enriched_by_openalex = await self._openalex_get_many(openalex_ids, limit=request.limit)
+        enriched_by_doi = await self._openalex_get_many_by_doi(doi_values, limit=request.limit)
+        enriched = [*enriched_by_openalex, *enriched_by_doi]
+        enriched_by_key = {_paper_key(paper): paper for paper in enriched}
+        merged: list[dict[str, Any]] = []
+        for paper in papers:
+            enriched_paper = enriched_by_key.get(_paper_key(paper))
+            merged.append(_merge_identity(paper, enriched_paper) or paper)
+        return merged
+
+    def _opencitations_identifier_for_identity(self, identity: dict[str, Any]) -> str | None:
+        doi = _normalize_doi(identity.get("doi"))
+        return f"doi:{doi}" if doi else None
+
+    def _supplement_directions(
         self,
         identity: dict[str, Any],
         request: CitationLookupRequest,
@@ -346,7 +503,7 @@ class CitationGraphService:
         missing_or_gappy = [
             item
             for item in requested
-            if self._should_supplement_with_s2(
+            if self._should_supplement(
                 identity,
                 item,
                 len(references) if item == "references" else len(citations),
@@ -357,14 +514,14 @@ class CitationGraphService:
             return requested
         return missing_or_gappy
 
-    def _should_supplement_with_s2(self, identity: dict[str, Any], direction: str, openalex_count: int, limit: int) -> bool:
-        if openalex_count == 0:
+    def _should_supplement(self, identity: dict[str, Any], direction: str, current_count: int, limit: int) -> bool:
+        if current_count == 0:
             return True
         expected_key = "reference_count" if direction == "references" else "citation_count"
         expected = identity.get(expected_key) or 0
         if expected <= 0 or expected > limit:
             return False
-        return abs(expected - openalex_count) / expected >= 0.33
+        return abs(expected - current_count) / expected >= 0.33
 
     async def _s2_identifier_for_identity(self, identity: dict[str, Any], diagnostics: list[str]) -> str | None:
         if identity.get("s2_id"):
@@ -387,29 +544,80 @@ class CitationGraphService:
         arxiv = _normalize_arxiv(request.arxiv_id)
         if not identifier and doi:
             identifier = f"doi:{doi}"
-        if not identifier and arxiv:
-            identifier = f"https://arxiv.org/abs/{arxiv}"
         if identifier:
             try:
                 work = await self.openalex._get_json(f"/works/{self.openalex._work_identifier(identifier)}")
                 return _normalize_openalex_work(work)
             except httpx.HTTPError as exc:
                 diagnostics.append(f"OpenAlex identity lookup failed for {identifier!r}: {exc}")
+        if arxiv:
+            work = await self._resolve_openalex_by_arxiv(arxiv, diagnostics)
+            if work:
+                return work
         if request.title:
-            try:
-                payload = await self.openalex._get_json(
-                    "/works",
-                    params={"search": request.title, "per_page": 3, "select": "id,doi,title,display_name,publication_year,cited_by_count,primary_location,authorships,referenced_works"},
-                )
-                results = payload.get("results") or []
-                if not results:
-                    return None
-                if len(results) > 1:
-                    diagnostics.append("OpenAlex title lookup returned multiple candidates; selected the top search result.")
-                return _normalize_openalex_work(results[0])
-            except httpx.HTTPError as exc:
-                diagnostics.append(f"OpenAlex title lookup failed: {exc}")
+            return await self._resolve_openalex_by_title(request.title, diagnostics, strict=False)
         return None
+
+    async def _resolve_openalex_by_arxiv(self, arxiv_id: str, diagnostics: list[str]) -> dict[str, Any] | None:
+        title = await self._fetch_arxiv_title(arxiv_id, diagnostics)
+        if not title:
+            return None
+        work = await self._resolve_openalex_by_title(title, diagnostics, strict=True, source="arXiv")
+        if work:
+            diagnostics.append("OpenAlex arXiv lookup used arXiv title metadata.")
+        return work
+
+    async def _resolve_openalex_by_title(
+        self,
+        title: str,
+        diagnostics: list[str],
+        *,
+        strict: bool,
+        source: str = "title",
+    ) -> dict[str, Any] | None:
+        try:
+            payload = await self.openalex._get_json(
+                "/works",
+                params={"search": title, "per_page": 3, "select": OPENALEX_WORK_SELECT},
+            )
+            results = payload.get("results") or []
+            if not results:
+                return None
+            if len(results) > 1:
+                diagnostics.append(f"OpenAlex {source} lookup returned multiple candidates; selected the top search result.")
+            selected = results[0]
+            score = _title_score(title, selected.get("title") or selected.get("display_name")) or 0.0
+            if strict and score < 0.94:
+                diagnostics.append(
+                    f"OpenAlex {source} lookup skipped top result because title_match_score={score}."
+                )
+                return None
+            return _normalize_openalex_work(selected)
+        except httpx.HTTPError as exc:
+            diagnostics.append(f"OpenAlex {source} lookup failed: {exc}")
+        return None
+
+    async def _fetch_arxiv_title(self, arxiv_id: str, diagnostics: list[str]) -> str | None:
+        try:
+            async with httpx.AsyncClient(timeout=getattr(self.openalex, "timeout", 15.0)) as client:
+                response = await client.get("https://export.arxiv.org/api/query", params={"id_list": arxiv_id})
+                response.raise_for_status()
+        except httpx.HTTPError as exc:
+            diagnostics.append(f"arXiv metadata lookup failed for {arxiv_id!r}: {exc}")
+            return None
+
+        try:
+            root = ET.fromstring(response.text)
+        except ET.ParseError as exc:
+            diagnostics.append(f"arXiv metadata lookup returned invalid XML for {arxiv_id!r}: {exc}")
+            return None
+
+        namespace = {"atom": "http://www.w3.org/2005/Atom"}
+        title_el = root.find("atom:entry/atom:title", namespace)
+        if title_el is None or not title_el.text:
+            diagnostics.append(f"arXiv metadata lookup returned no entry for {arxiv_id!r}.")
+            return None
+        return " ".join(title_el.text.split())
 
     async def _resolve_openalex_from_identity(self, identity: dict[str, Any], diagnostics: list[str]) -> dict[str, Any] | None:
         request = CitationResolveRequest(
@@ -472,7 +680,7 @@ class CitationGraphService:
                 "filter": f"cites:{_openalex_url(openalex_id)}",
                 "per_page": min(limit, 100),
                 "cursor": "*",
-                "select": "id,doi,title,display_name,publication_year,cited_by_count,primary_location,authorships,referenced_works",
+                "select": OPENALEX_WORK_SELECT,
             },
             limit=limit,
         )
@@ -490,7 +698,25 @@ class CitationGraphService:
                 params={
                     "filter": f"openalex:{filter_value}",
                     "per_page": len(batch),
-                    "select": "id,doi,title,display_name,publication_year,cited_by_count,primary_location,authorships,referenced_works",
+                    "select": OPENALEX_WORK_SELECT,
+                },
+            )
+            papers.extend(paper for paper in (_normalize_openalex_work(item) for item in (payload.get("results") or [])) if paper)
+        return papers[:limit]
+
+    async def _openalex_get_many_by_doi(self, dois: list[str], *, limit: int) -> list[dict[str, Any]]:
+        if not dois:
+            return []
+        papers: list[dict[str, Any]] = []
+        normalized_dois = [doi for doi in (_normalize_doi(item) for item in dois) if doi]
+        for start in range(0, min(len(normalized_dois), limit), 50):
+            batch = normalized_dois[start : start + 50]
+            payload = await self.openalex._get_json(
+                "/works",
+                params={
+                    "filter": f"doi:{'|'.join(batch)}",
+                    "per_page": len(batch),
+                    "select": OPENALEX_WORK_SELECT,
                 },
             )
             papers.extend(paper for paper in (_normalize_openalex_work(item) for item in (payload.get("results") or [])) if paper)

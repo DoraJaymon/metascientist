@@ -83,10 +83,18 @@ Use `--provider auto` by default.
 
 - resolve through OpenAlex first
 - fetch requested refs/citing through OpenAlex first
-- if a requested side is missing or clearly incomplete, resolve S2 once and use
-  Semantic Scholar as supplement
-- for `lookup`, if either side triggers S2 supplement, supplement both sides
+- if a requested side is missing or clearly incomplete and a DOI is available,
+  query OpenCitations before S2 and enrich its DOI/OpenAlex identifiers through
+  OpenAlex metadata
+- if OpenAlex + OpenCitations are still missing or clearly incomplete, resolve
+  S2 once and use Semantic Scholar as the final supplement
+- for `lookup`, if either side triggers supplement, supplement both requested
+  sides
 - preserve partial S2 results when pagination hits rate limits
+
+When an S2 API key is available, pass it through the environment as
+`S2_API_KEY` or `SEMANTIC_SCHOLAR_API_KEY`. Never hard-code a real key in the
+skill, command examples, repository files, or committed docs.
 
 Use `--provider openalex` only when the user explicitly asks not to call
 Semantic Scholar or wants OpenAlex-only results.

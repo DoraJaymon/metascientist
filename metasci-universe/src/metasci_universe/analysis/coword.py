@@ -27,7 +27,7 @@ async def coword(
     dataset_path: str,
     *,
     text_fields: list[str] | None = None,
-    text_backend: str = "spacy",
+    text_backend: str = "sklearn",
     language: str = "en",
     spacy_model: str | None = None,
     lemmatize: bool = True,

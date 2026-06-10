@@ -97,7 +97,7 @@ class CoWordAnalysisRequest(DatasetAnalysisRequest):
     """Co-word and term co-occurrence analysis from titles, abstracts, or topics."""
 
     text_fields: list[TextField] = Field(default_factory=lambda: ["title", "abstract"])
-    text_backend: TextBackend = "spacy"
+    text_backend: TextBackend = "sklearn"
     language: str = "en"
     spacy_model: str | None = None
     lemmatize: bool = True
@@ -153,9 +153,9 @@ class CoWordAnalysisRequest(DatasetAnalysisRequest):
 class TopicModelingRequest(DatasetAnalysisRequest):
     """Topic modeling with LDA or BERTopic backends."""
 
-    backend: TopicModelingBackend = "embedding_kmeans"
+    backend: TopicModelingBackend = "sklearn_lda"
     text_fields: list[TextField] = Field(default_factory=lambda: ["title", "abstract"])
-    text_backend: TextBackend = "spacy"
+    text_backend: TextBackend = "sklearn"
     language: str = "en"
     spacy_model: str | None = None
     lemmatize: bool = True
@@ -165,7 +165,7 @@ class TopicModelingRequest(DatasetAnalysisRequest):
     max_features: int = Field(default=5000, gt=100, le=100000)
     include_evolution: bool = True
     year_field: str = "publication_year"
-    embedding_model: str | None = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_model: str | None = None
     embedding_artifact: str | None = Field(
         default=None,
         description="Optional embeddings artifact directory, metadata.json, or embeddings.npy to reuse for embedding backends.",
@@ -189,7 +189,7 @@ class TopicLandscapeRequest(DatasetAnalysisRequest):
     include_evolution: bool = True
     year_field: str = "publication_year"
     text_fields: list[TextField] = Field(default_factory=lambda: ["title", "abstract"])
-    text_backend: TextBackend = "spacy"
+    text_backend: TextBackend = "sklearn"
     language: str = "en"
     spacy_model: str | None = None
     lemmatize: bool = True
@@ -203,7 +203,7 @@ class TopicLandscapeRequest(DatasetAnalysisRequest):
         default=None,
         description="Optional co-word terms to track in term evolution outputs.",
     )
-    modeling_backend: TopicModelingBackend = "embedding_kmeans"
+    modeling_backend: TopicModelingBackend = "sklearn_lda"
     nr_topics: int | None = Field(default=None, ge=2, le=200)
     max_docs: int | None = Field(default=None, gt=0)
     max_features: int = Field(default=5000, gt=100, le=100000)

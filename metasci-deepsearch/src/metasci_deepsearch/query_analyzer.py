@@ -40,7 +40,7 @@ class QueryAnalyzer:
     CRITERION_PATTERN = re.compile(r"^\s*[-*]\s*\[(?P<weight>[\d\.]+)\]\s*(?P<text>.+)$")
 
     def __init__(self, model: Optional[str] = None, prompts_path: Optional[str] = None) -> None:
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        self.model = model or os.getenv("OPENAI_MODEL", "deepseek-chat")
         self.prompts = _load_prompts() if prompts_path is None else yaml.safe_load(
             open(prompts_path, encoding="utf-8")
         )
@@ -51,7 +51,7 @@ class QueryAnalyzer:
             from openai import AsyncOpenAI
             self._client = AsyncOpenAI(
                 api_key=os.getenv("OPENAI_API_KEY"),
-                base_url=os.getenv("OPENAI_BASE_URL"),
+                base_url=os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE_URL"),
             )
         return self._client
 

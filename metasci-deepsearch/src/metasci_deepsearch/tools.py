@@ -43,13 +43,14 @@ logger = logging.getLogger(__name__)
 
 def _llm_client():
     from openai import AsyncOpenAI
+    base_url = os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE_URL")
     return AsyncOpenAI(
         api_key=os.getenv("OPENAI_API_KEY"),
-        base_url=os.getenv("OPENAI_BASE_URL"),
+        base_url=base_url,
     )
 
 def _default_model() -> str:
-    return os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    return os.getenv("OPENAI_MODEL", "deepseek-chat")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
