@@ -24,6 +24,7 @@ legacy repository paths.
 Inside `metasci-agent`, prefer direct light-agent tools:
 
 - `metasci_search_works`
+- `metasci_get_work_fulltext`
 - `metasci_fetch_conference_papers`
 - `metasci_search_authors`
 - `metasci_get_author_profile`
@@ -61,7 +62,7 @@ Then load the execution reference:
 
 | User intent | Read |
 | --- | --- |
-| General paper/work retrieval by query, topic, source, institution, year, or author ID | `references/works.md` |
+| General paper/work retrieval by query, topic, source, institution, year, author ID, ScienceDirect/Elsevier source, Springer DOI/URL retrieval, or provider full text | `references/works.md` |
 | Author candidate search, disambiguation, profiles, DOI/work authorships, or works by selected author | `references/authors.md` |
 | Accepted/proceedings papers from CS conferences such as ACL, CVPR, ICLR, ICML, NeurIPS, AISTATS, COLT, UAI, CoRL | `references/conferences.md` |
 | Fetching or re-fetching data for analysis readiness, especially authors/references for science landscape | `references/refetch-for-analysis.md` |
@@ -85,6 +86,10 @@ Identify only the elements needed for the classified task:
 - `include`: optional fields such as `authors` or `references`.
 - `limit`: only for sample, preview, top N, or bounded datasets.
 - `sort_by`: only when the user explicitly wants newest/recent or another non-default sort.
+- `provider`: use `sciencedirect` only when the user explicitly asks for
+  ScienceDirect/Elsevier content or DOI-level ScienceDirect metadata. Use
+  `springer` only for a known Springer DOI/URL or explicit Springer full-text
+  request. Otherwise leave the default provider.
 
 Prefer explicit OpenAlex IDs (`--author-id`, `--source-id`, etc.) when the user
 provides them. If names are ambiguous, surface diagnostics and disambiguate
@@ -100,6 +105,12 @@ before fetching dependent datasets.
   references when feasible. See `references/refetch-for-analysis.md`.
 - For conference accepted/proceedings lists, prefer source-specific conference
   connectors over general OpenAlex source search. See `references/conferences.md`.
+- For ScienceDirect, require `ELSEVIER_API_KEY` or `SCIENCEDIRECT_API_KEY` in
+  the runtime environment. `ELSEVIER_INST_TOKEN` / `SCIENCEDIRECT_INST_TOKEN`
+  may be needed for institution-entitled fields.
+- For Springer, use DOI/URL-level commands only. `works.search --provider
+  springer` is intentionally unsupported; `works.fulltext --provider springer`
+  saves `fulltext.md`, `work.json`, and optionally `article.pdf`.
 
 ## Output
 

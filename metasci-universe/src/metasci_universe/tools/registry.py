@@ -23,7 +23,7 @@ from metasci_universe.schemas.citations import CitationLookupRequest, CitationRe
 from metasci_universe.schemas.common import DatasetInfoRequest, MetaSciResult
 from metasci_universe.schemas.conferences import ConferencePapersRequest
 from metasci_universe.schemas.embeddings import EmbedWorksRequest
-from metasci_universe.schemas.works import WorksGetRequest, WorksSearchRequest
+from metasci_universe.schemas.works import WorksFullTextRequest, WorksGetRequest, WorksSearchRequest
 from metasci_universe.storage.saved_dataset import SavedDataset
 
 
@@ -63,6 +63,13 @@ async def _works_get(payload: dict[str, Any]) -> MetaSciResult:
 
     request = WorksGetRequest(**payload)
     return await works.get(**request.model_dump())
+
+
+async def _works_fulltext(payload: dict[str, Any]) -> MetaSciResult:
+    from metasci_universe.api import works
+
+    request = WorksFullTextRequest(**payload)
+    return await works.fulltext(**request.model_dump())
 
 
 async def _conferences_papers(payload: dict[str, Any]) -> MetaSciResult:
@@ -472,6 +479,20 @@ TOOLS: dict[str, ToolDefinition] = {
         input_model=WorksGetRequest,
         handler=_works_get,
         examples=["await ms.run_tool('works.get', {'identifier': '10.7717/peerj.4375'})"],
+    ),
+    "works.fulltext": ToolDefinition(
+        name="works.fulltext",
+        description=(
+            "Fetch full text for one work. ScienceDirect returns entitlement-dependent XML; "
+            "Springer returns article-page Markdown and can optionally save the PDF."
+        ),
+        input_model=WorksFullTextRequest,
+        handler=_works_fulltext,
+        examples=[
+            "await ms.run_tool('works.fulltext', {'identifier': '10.1016/j.example.2025.01.001', 'provider': 'sciencedirect'})",
+            "await ms.run_tool('works.fulltext', {'identifier': '10.1007/s10796-025-10632-z', 'provider': 'springer', 'download_pdf': True})",
+        ],
+        required_fields=["identifier"],
     ),
     "conferences.papers": ToolDefinition(
         name="conferences.papers",

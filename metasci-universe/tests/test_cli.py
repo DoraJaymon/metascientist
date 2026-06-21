@@ -25,6 +25,36 @@ def test_cli_conference_papers_accepts_new_sources() -> None:
     assert "pmlr" in result.output
 
 
+def test_cli_works_accepts_sciencedirect_and_springer_providers() -> None:
+    search_result = CliRunner().invoke(main, ["works", "search", "--help"])
+    get_result = CliRunner().invoke(main, ["works", "get", "--help"])
+
+    assert search_result.exit_code == 0
+    assert get_result.exit_code == 0
+    assert "sciencedirect" in search_result.output
+    assert "sciencedirect" in get_result.output
+    assert "springer" in search_result.output
+    assert "springer" in get_result.output
+
+
+def test_cli_works_fulltext_help() -> None:
+    result = CliRunner().invoke(main, ["works", "fulltext", "--help"])
+
+    assert result.exit_code == 0
+    assert "--provider" in result.output
+    assert "sciencedirect" in result.output
+    assert "springer" in result.output
+    assert "--download-pdf" in result.output
+
+
+def test_cli_authors_from_work_accepts_doi_level_providers() -> None:
+    result = CliRunner().invoke(main, ["authors", "from-work", "--help"])
+
+    assert result.exit_code == 0
+    assert "sciencedirect" in result.output
+    assert "springer" in result.output
+
+
 def test_cli_citations_help() -> None:
     result = CliRunner().invoke(main, ["citations", "lookup", "--help"])
     assert result.exit_code == 0

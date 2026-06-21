@@ -5,6 +5,7 @@ import asyncio
 from metasci_agent.tools import metasci_tools
 from metasci_agent.tools.metasci_tools import (
     MetaSciFetchConferencePapersTool,
+    MetaSciGetWorkFullTextTool,
     MetaSciSearchWorksTool,
     list_metasci_agent_tool_names,
 )
@@ -15,6 +16,7 @@ def test_direct_tool_names_are_business_actions() -> None:
     names = list_metasci_agent_tool_names()
     assert "metasci_search_works" in names
     assert "metasci_fetch_conference_papers" in names
+    assert "metasci_get_work_fulltext" in names
     assert "metasci_search_authors" in names
     assert "metasci_list_tools" not in names
     assert "metasci_describe_tool" not in names
@@ -58,3 +60,32 @@ def test_fetch_conference_papers_adapter_calls_public_api(monkeypatch) -> None:
     assert result.structured_output["metadata"]["provider"] == "acl"
     assert result.structured_output["preview_works"][0]["title"] == "A Language Paper"
     assert result.artifacts["data_file"].endswith("papers.json")
+
+
+def test_get_work_fulltext_adapter_calls_public_api(monkeypatch) -> None:
+    async def fake_fulltext(**kwargs):
+        return MetaSciResult(
+            command="works.fulltext",
+            input=kwargs,
+            data={"xml_file": "metasci_outputs/example/fulltext.xml", "content_length": 123},
+            artifacts={
+                "xml_file": "metasci_outputs/example/fulltext.xml",
+                "metadata_file": "metasci_outputs/example/metadata.json",
+            },
+            metadata={"provider": "sciencedirect", "format": "xml"},
+        )
+
+    monkeypatch.setattr(metasci_tools.ms.works, "fulltext", fake_fulltext)
+
+    result = asyncio.run(
+        MetaSciGetWorkFullTextTool().forward(
+            identifier="10.1016/j.example.2025.01.001",
+            provider="sciencedirect",
+        )
+    )
+
+    assert result.success
+    assert result.structured_output["command"] == "works.fulltext"
+    assert result.structured_output["metadata"]["provider"] == "sciencedirect"
+    assert result.structured_output["fulltext"]["xml_file"].endswith("fulltext.xml")
+    assert result.artifacts["xml_file"].endswith("fulltext.xml")

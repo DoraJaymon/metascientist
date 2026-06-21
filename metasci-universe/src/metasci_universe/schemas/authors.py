@@ -6,10 +6,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .works import ProviderName
-
-
 DetailLevel = Literal["summary", "full"]
+AuthorProviderName = Literal["auto", "openalex", "service"]
+WorkAuthorsProviderName = Literal["auto", "openalex", "sciencedirect", "springer", "service"]
 
 
 class AuthorSearchRequest(BaseModel):
@@ -20,7 +19,7 @@ class AuthorSearchRequest(BaseModel):
     name: str
     limit: int = Field(default=10, gt=0, le=200)
     detail_level: DetailLevel = "summary"
-    provider: ProviderName = "auto"
+    provider: AuthorProviderName = "auto"
     output_dir: str | None = None
 
 
@@ -31,7 +30,7 @@ class AuthorProfileRequest(BaseModel):
 
     identifier: str
     detail_level: DetailLevel = "full"
-    provider: ProviderName = "auto"
+    provider: AuthorProviderName = "auto"
     output_dir: str | None = None
 
 
@@ -44,7 +43,7 @@ class WorkAuthorsRequest(BaseModel):
     author_position: int = Field(default=1, gt=0)
     all_authors: bool = False
     detail_level: DetailLevel = "summary"
-    provider: ProviderName = "auto"
+    provider: WorkAuthorsProviderName = "auto"
     output_dir: str | None = None
 
     @model_validator(mode="after")
