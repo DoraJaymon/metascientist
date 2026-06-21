@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-ProviderName = Literal["auto", "openalex", "service"]
+ProviderName = Literal["auto", "openalex", "sciencedirect", "springer", "service"]
 SortBy = Literal[
     "cited_by_count:desc",
     "publication_date:desc",
@@ -115,3 +115,14 @@ class WorksGetRequest(BaseModel):
     identifier: str
     provider: ProviderName = "auto"
     output_dir: str | None = None
+
+
+class WorksFullTextRequest(BaseModel):
+    """Fetch provider-supported full text for one work."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    identifier: str
+    provider: Literal["sciencedirect", "springer"] = "sciencedirect"
+    output_dir: str | None = None
+    download_pdf: bool = False

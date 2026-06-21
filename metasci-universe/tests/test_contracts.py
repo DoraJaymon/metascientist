@@ -3,10 +3,10 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from metasci_universe.schemas.authors import WorkAuthorsRequest
+from metasci_universe.schemas.authors import AuthorSearchRequest, WorkAuthorsRequest
 from metasci_universe.schemas.conferences import ConferencePapersRequest
 from metasci_universe.schemas.embeddings import EmbedWorksRequest
-from metasci_universe.schemas.works import WorksSearchRequest
+from metasci_universe.schemas.works import WorksFullTextRequest, WorksSearchRequest
 
 
 def test_works_search_requires_constraint() -> None:
@@ -33,6 +33,20 @@ def test_works_search_normalizes_new_filters() -> None:
     request = WorksSearchRequest(query="science", country_code=" us ", work_type=" Article ")
     assert request.country_code == "US"
     assert request.work_type == "article"
+
+
+def test_sciencedirect_is_a_works_provider_not_an_author_provider() -> None:
+    assert WorksSearchRequest(query="science", provider="sciencedirect").provider == "sciencedirect"
+    with pytest.raises(ValidationError):
+        AuthorSearchRequest(name="Ada Lovelace", provider="sciencedirect")
+
+
+def test_springer_is_doi_level_provider_not_author_search_provider() -> None:
+    assert WorksSearchRequest(query="science", provider="springer").provider == "springer"
+    assert WorksFullTextRequest(identifier="10.1007/example", provider="springer", download_pdf=True).download_pdf is True
+    assert WorkAuthorsRequest(identifier="10.1007/example", provider="springer").provider == "springer"
+    with pytest.raises(ValidationError):
+        AuthorSearchRequest(name="Ada Lovelace", provider="springer")
 
 
 def test_work_authors_rejects_all_authors_full() -> None:

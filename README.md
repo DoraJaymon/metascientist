@@ -11,7 +11,7 @@
 ```
 metascientist/
 ├── metasci-universe/     # 🌌 核心 Python 包（CLI + Python API 双入口）
-│   ├── providers/        #    数据源适配层（OpenAlex、DBLP、OpenReview、WoS、Scopus…）
+│   ├── providers/        #    数据源适配层（OpenAlex、ScienceDirect、DBLP、OpenReview、WoS、Scopus…）
 │   ├── analysis/         #    分析引擎（文献计量、宏观格局、作者全景、主题地图、引用结构…）
 │   ├── workflows/        #    一键式组合工作流（science_landscape 等）
 │   └── cli.py            #    metasci 命令行
@@ -57,7 +57,7 @@ metascientist/
 
 项目的数据与分析引擎，以 Python 包形式交付，支持 CLI 与 Python API。
 
-**数据获取层** 统一接入 7 大类学术数据源：OpenAlex（2 亿+ 论文）、DBLP、OpenReview、ACL Anthology、CVF / IEEE / PMLR，以及付费数据库 Web of Science 和 Scopus，覆盖 **20+ 顶会**直接拉取。
+**数据获取层** 统一接入多类学术数据源：OpenAlex（2 亿+ 论文）、ScienceDirect / Elsevier 全文接口、DBLP、OpenReview、ACL Anthology、CVF / IEEE / PMLR，以及付费数据库 Web of Science 和 Scopus，覆盖 **20+ 顶会**直接拉取。
 
 **分析引擎** 包含多个可独立调用、也可组合运行的分析模块：
 - 📊 **bibliometrics** — 发文趋势、引用分布、来源分布
@@ -120,10 +120,10 @@ metascientist/
           │                    │                    │
     🌐 开放数据源          📚 顶会直连           💼 付费数据库
           │                    │                    │
-   OpenAlex 🔵          OpenReview 🟠        Web of Science 🟡
-   DBLP 🟢             ACL Anthology 🔴      Scopus 🟣
+   OpenAlex 🔵          OpenReview 🟠        ScienceDirect 🟠
+   DBLP 🟢             ACL Anthology 🔴      Web of Science 🟡
                         CVF Open Access 🔵
-                        PMLR 🟤
+                        PMLR 🟤             Scopus 🟣
 ```
 
 **数据源覆盖一览：**
@@ -131,6 +131,8 @@ metascientist/
 | 数据源 | 覆盖内容 | 规模 | 可获取的字段 |
 |--------|---------|------|-------------|
 | 🔵 OpenAlex | 全学科论文、作者、机构 | 2 亿+ 论文 | 标题、摘要、引用、作者、机构、主题、DOI |
+| 🟠 ScienceDirect / Elsevier | Elsevier 期刊论文与授权全文 | 取决于 API 与机构权限 | 标题、摘要、作者、参考文献、PII/DOI、全文 XML |
+| 🟢 Springer | Springer 单篇文章页面 | DOI / URL 级 | 标题、摘要、作者、参考文献、全文 Markdown、可选 PDF |
 | 🟢 DBLP | CS 全领域会议与期刊 | 完整 CS 档案 | 标题、作者、年份、venue |
 | 🟠 OpenReview | ML 顶会投稿与录用 | NeurIPS / ICLR / ICML | 论文、评审、录用状态 |
 | 🔴 ACL Anthology | NLP 顶会完整 proceedings | ACL / EMNLP / NAACL / COLING / EACL | 标题、作者、PDF 链接 |
@@ -148,17 +150,32 @@ metascientist/
 
 ```bash
 # 按关键词检索论文，保存到本地
-metasci works search --query "graph neural networks" --from-year 2022 --limit 300 \
-  --include authors --save metasci_outputs/gnn_2022.json --json
+metasci works search "graph neural networks" --from-year 2022 --limit 300 \
+  --include authors --output metasci_outputs/gnn_2022.json --json
 
 # 拉取 ICLR 2024 全量录用论文
-metasci conferences papers --venue "iclr" --year 2024 --json
+metasci conferences papers "iclr" --year 2024 --json
 
 # 检索某机构发表的论文
 metasci works search --institution-name "Peking University" --from-year 2023 --json
 
 # 查找学者并获取主页
-metasci authors search --name "Yoshua Bengio" --limit 5 --json
+metasci authors search "Yoshua Bengio" --limit 5 --json
+
+# 检索 ScienceDirect / Elsevier 文章（需要 API key）
+metasci works search "large language models" --provider sciencedirect \
+  --from-year 2024 --limit 20 --json
+
+# 获取单篇 ScienceDirect 文章元数据（摘要、作者、参考文献等）
+metasci works get "10.1016/j.example.2025.01.001" --provider sciencedirect --json
+
+# 获取单篇 ScienceDirect 全文 XML（取决于 API 与机构授权）
+metasci works fulltext "10.1016/j.example.2025.01.001" \
+  --provider sciencedirect --json
+
+# 获取单篇 Springer 文章全文 Markdown，并可选保存 PDF
+metasci works fulltext "10.1007/s10796-025-10632-z" \
+  --provider springer --download-pdf --json
 ```
 
 **📦 Package 层 — Python API**
@@ -176,6 +193,69 @@ result = await ms.run_tool("conferences.papers", {"venue": "neurips", "year": 20
 
 # 获取某作者的全部论文
 result = await ms.run_tool("works.search", {"author_id": "A5023888391", "limit": 200})
+
+# 获取 ScienceDirect 全文 XML
+result = await ms.run_tool("works.fulltext", {
+    "identifier": "10.1016/j.example.2025.01.001",
+    "provider": "sciencedirect",
+})
+
+# 获取 Springer 全文 Markdown，可选下载 PDF
+result = await ms.run_tool("works.fulltext", {
+    "identifier": "10.1007/s10796-025-10632-z",
+    "provider": "springer",
+    "download_pdf": True,
+})
+```
+
+**ScienceDirect / Elsevier 使用说明**
+
+ScienceDirect 是当前核心包中用于**授权全文获取**的付费数据源。与 OpenAlex、DBLP、OpenReview 等主要提供元数据或 PDF 链接的数据源不同，ScienceDirect 支持通过 `works.fulltext` 保存单篇论文的全文 XML。
+
+使用前需要配置 API key：
+
+```bash
+export ELSEVIER_API_KEY="your-api-key"
+# 或
+export SCIENCEDIRECT_API_KEY="your-api-key"
+
+# 如需机构授权内容，可额外配置
+export ELSEVIER_INST_TOKEN="your-inst-token"
+# 或
+export SCIENCEDIRECT_INST_TOKEN="your-inst-token"
+```
+
+Windows PowerShell：
+
+```powershell
+$env:ELSEVIER_API_KEY="your-api-key"
+$env:ELSEVIER_INST_TOKEN="your-inst-token"
+```
+
+当前 ScienceDirect provider 支持：
+
+- `works.search --provider sciencedirect`：按关键词和年份检索 ScienceDirect 文章，返回标题、DOI、PII、来源、开放获取状态等元数据。
+- `works.get --provider sciencedirect`：按 DOI、DOI URL 或 PII 获取单篇文章元数据，包含摘要、作者、参考文献和原始 API payload。
+- `works.fulltext --provider sciencedirect`：按 DOI、DOI URL 或 PII 获取全文 XML，保存为 `fulltext.xml`。
+- `authors.from_work --provider sciencedirect`：从 ScienceDirect 单篇文章元数据中提取作者列表或指定位置作者。
+
+注意：ScienceDirect 检索当前主要应用 `query`、`from_year` / `to_year` 和 `limit`；OpenAlex 风格的 `topic_name`、`author_id`、`institution_name`、国家过滤、引用数过滤等结构化条件会在 diagnostics 中提示为未应用或受限。全文 XML 是否可获取取决于 Elsevier API 权限和机构订阅授权。
+
+**Springer 使用说明**
+
+Springer provider 面向 DOI / URL 级单篇文章获取，不支持 `works.search --provider springer`。它从 Springer 文章详情页提取规范化元数据，并通过 `works.fulltext` 保存全文 Markdown；使用 `--download-pdf` 时，如果页面暴露 PDF 链接，会额外保存 `article.pdf`。
+
+当前 Springer provider 支持：
+
+- `works.get --provider springer`：按 DOI、DOI URL 或 Springer 文章 URL 获取单篇文章元数据，包含标题、摘要、作者、参考文献 DOI、期刊来源、PDF 链接和抽取后的 `_raw` 字段。
+- `works.fulltext --provider springer`：保存 `fulltext.md`、`work.json` 和 `metadata.json`；使用 `--download-pdf` 时额外保存 `article.pdf`。
+- `authors.from_work --provider springer`：从 Springer 单篇文章元数据中提取作者列表或指定位置作者。
+
+手动 smoke test：
+
+```bash
+metasci works get "10.1007/s10796-025-10632-z" --provider springer --json
+metasci works fulltext "10.1007/s10796-025-10632-z" --provider springer --download-pdf --json
 ```
 
 **🛠️ Skill 层 — 自然语言驱动**
@@ -287,8 +367,8 @@ pip install "metasci-universe[analysis]"
 cp -r metasci-skills/skills/* ~/.claude/skills/
 
 # 3. 检索数据
-metasci works search --query "large language models" --from-year 2024 --limit 200 \
-  --save metasci_outputs/llm_2024.json --json
+metasci works search "large language models" --from-year 2024 --limit 200 \
+  --output metasci_outputs/llm_2024.json --json
 
 # 4. 运行分析
 python - <<'EOF'

@@ -10,7 +10,7 @@ from light_agent.core.tool import AsyncTool, ToolResult
 from metasci_universe.schemas.authors import AuthorProfileRequest, AuthorSearchRequest, WorkAuthorsRequest
 from metasci_universe.schemas.common import DatasetInfoRequest, MetaSciResult
 from metasci_universe.schemas.conferences import ConferencePapersRequest
-from metasci_universe.schemas.works import WorksGetRequest, WorksSearchRequest
+from metasci_universe.schemas.works import WorksFullTextRequest, WorksGetRequest, WorksSearchRequest
 
 
 _METASCI_RESULT_SCHEMA = {
@@ -30,9 +30,12 @@ class MetaSciSearchWorksTool(AsyncTool):
 
     name: str = "metasci_search_works"
     description: str = (
-        "Search scholarly works with OpenAlex-backed MetaSci Universe. Use for topic, keyword, "
-        "source, author, institution, year, and citation-sorted paper retrieval. Saves a reusable "
-        "dataset artifact and returns artifact paths, counts, diagnostics, and a short preview."
+        "Search scholarly works with MetaSci Universe. Use the default OpenAlex-backed route for "
+        "topic, source, author, institution, year, and citation-sorted retrieval; use "
+        "provider='sciencedirect' only for explicit ScienceDirect/Elsevier keyword retrieval. "
+        "The Springer provider is DOI/URL-level only and does not support works search. "
+        "Saves a reusable dataset artifact and returns artifact paths, counts, diagnostics, and "
+        "a short preview."
     )
     parameters: dict = WorksSearchRequest.model_json_schema()
     output_schema: dict = _METASCI_RESULT_SCHEMA
@@ -51,8 +54,9 @@ class MetaSciGetWorkTool(AsyncTool):
 
     name: str = "metasci_get_work"
     description: str = (
-        "Get metadata for one scholarly work by DOI, OpenAlex ID, PMID, or URL. Saves a small "
-        "work artifact and returns the normalized record plus artifact paths."
+        "Get metadata for one scholarly work by DOI, OpenAlex ID, PMID, URL, or ScienceDirect "
+        "PII when provider='sciencedirect'. Use provider='springer' for Springer DOI or article "
+        "URL metadata. Saves a small work artifact and returns the normalized record plus artifact paths."
     )
     parameters: dict = WorksGetRequest.model_json_schema()
     output_schema: dict = _METASCI_RESULT_SCHEMA
@@ -64,6 +68,26 @@ class MetaSciGetWorkTool(AsyncTool):
         except Exception as exc:
             return ToolResult(output=None, error=f"{self.name} failed: {exc}")
         return _to_tool_result(result, preview_key="preview_work")
+
+
+class MetaSciGetWorkFullTextTool(AsyncTool):
+    """Fetch full-text XML for one work through metasci_universe."""
+
+    name: str = "metasci_get_work_fulltext"
+    description: str = (
+        "Fetch full text for one work. ScienceDirect saves entitlement-dependent fulltext.xml; "
+        "Springer saves fulltext.md, work.json, and optionally article.pdf when download_pdf=true."
+    )
+    parameters: dict = WorksFullTextRequest.model_json_schema()
+    output_schema: dict = _METASCI_RESULT_SCHEMA
+    tags: list[str] = ["metasci", "works", "fulltext", "data-fetch"]
+
+    async def forward(self, **kwargs: Any) -> ToolResult:
+        try:
+            result = await ms.works.fulltext(**kwargs)
+        except Exception as exc:
+            return ToolResult(output=None, error=f"{self.name} failed: {exc}")
+        return _to_tool_result(result, preview_key="fulltext")
 
 
 class MetaSciFetchConferencePapersTool(AsyncTool):
@@ -184,6 +208,7 @@ def metasci_agent_tools(*, include_dataset_info: bool = True) -> list[AsyncTool]
     tools: list[AsyncTool] = [
         MetaSciSearchWorksTool(),
         MetaSciGetWorkTool(),
+        MetaSciGetWorkFullTextTool(),
         MetaSciFetchConferencePapersTool(),
         MetaSciSearchAuthorsTool(),
         MetaSciGetAuthorProfileTool(),

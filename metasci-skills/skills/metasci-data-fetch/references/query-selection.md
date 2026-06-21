@@ -19,6 +19,14 @@ mix of keywords, topics, sources, venues, authors, institutions, or years.
   when the identity is not already clear.
 - Use institution constraints when the user asks for works affiliated with an
   institution; report ambiguity diagnostics for institution name resolution.
+- Use `provider=sciencedirect` only when the user explicitly wants
+  ScienceDirect/Elsevier retrieval, ScienceDirect DOI metadata, or
+  subscription-sensitive Elsevier article fields. Do not use it as the default
+  broad discovery source.
+- Use `provider=springer` only when the user provides a known Springer DOI,
+  DOI URL, or Springer article URL, or explicitly asks for Springer full text.
+  Do not use it for broad discovery; Springer search is intentionally
+  unsupported in the first version.
 
 ## Common Choices
 
@@ -31,6 +39,10 @@ mix of keywords, topics, sources, venues, authors, institutions, or years.
 | "CVPR 2024 accepted papers" | conference connector: `metasci conferences papers cvpr --year 2024 ...` |
 | "Massimo Aria's papers" | search/disambiguate author first unless an OpenAlex Author ID is provided |
 | "quantum computing papers from USTC" | `query` or `topic_name` plus `institution_name`, depending on whether the phrase is literal or a broad field |
+| "ScienceDirect papers about drug discovery, 2024-2025" | `query`, years, plus `provider=sciencedirect` |
+| "get the ScienceDirect metadata for DOI 10.xxxx/yyyy" | `works get DOI --provider sciencedirect` |
+| "get the Springer full text for DOI 10.1007/..." | `works fulltext DOI --provider springer` |
+| "download the Springer PDF for this article URL" | `works fulltext URL --provider springer --download-pdf` |
 
 ## Coverage Versus Precision
 

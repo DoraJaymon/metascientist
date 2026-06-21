@@ -1,7 +1,9 @@
 # General Works Retrieval
 
-Use this reference for OpenAlex-backed paper/work retrieval by query, topic,
-source, institution, author ID, and year.
+Use this reference for paper/work retrieval by query, topic, source,
+institution, author ID, year, explicit ScienceDirect/Elsevier routing, and
+Springer DOI/URL-level retrieval.
+OpenAlex remains the default broad discovery provider.
 
 Read `query-selection.md` first when the request mixes keywords, broad topics,
 sources, venues, institutions, or authors.
@@ -31,6 +33,82 @@ metasci works search "peer review" \
   --limit 500 \
   --json
 ```
+
+## ScienceDirect / Elsevier Retrieval
+
+Use ScienceDirect only when the user explicitly requests ScienceDirect,
+Elsevier, or ScienceDirect article metadata. The runtime must have
+`ELSEVIER_API_KEY` or `SCIENCEDIRECT_API_KEY`; an institutional token may be
+required for entitlement-sensitive fields.
+
+```bash
+metasci works search "deep learning AND drug discovery" \
+  --provider sciencedirect \
+  --from-year 2024 \
+  --to-year 2025 \
+  --limit 50 \
+  --json
+```
+
+For a known DOI, prefer single-work retrieval:
+
+```bash
+metasci works get 10.1016/j.example.2025.01.001 \
+  --provider sciencedirect \
+  --json
+```
+
+For full-text XML, use the dedicated command so the XML is saved as a separate
+artifact rather than mixed into `papers.json`:
+
+```bash
+metasci works fulltext 10.1016/j.example.2025.01.001 \
+  --provider sciencedirect \
+  --json
+```
+
+ScienceDirect search currently applies query, year range, and limit. It returns
+normalized work records with DOI, PII, title, publication date, source title,
+and open-access status when available. DOI-level retrieval may add abstract,
+authors, references, ISSN, and raw Elsevier JSON depending on API response and
+subscription entitlements. Full-text retrieval writes `fulltext.xml` plus
+`metadata.json`; access may fail for non-open or non-entitled articles.
+
+## Springer DOI / URL Retrieval
+
+Use Springer only for known DOI, DOI URL, or Springer article URL retrieval.
+The first version does not support `works.search --provider springer`.
+
+For metadata:
+
+```bash
+metasci works get 10.1007/s10796-025-10632-z \
+  --provider springer \
+  --json
+```
+
+For full-text Markdown:
+
+```bash
+metasci works fulltext 10.1007/s10796-025-10632-z \
+  --provider springer \
+  --json
+```
+
+To save the PDF when Springer exposes one:
+
+```bash
+metasci works fulltext 10.1007/s10796-025-10632-z \
+  --provider springer \
+  --download-pdf \
+  --json
+```
+
+Springer full-text retrieval writes `fulltext.md`, `work.json`, and
+`metadata.json`; with `--download-pdf` it also writes `article.pdf`. Metadata is
+normalized into the same work shape used by other providers. `referenced_works`
+contains DOI URLs only when a DOI can be extracted; full reference strings are
+kept under `_raw.references` in `work.json`.
 
 ## Topic + Keyword
 

@@ -82,7 +82,12 @@ def works() -> None:
 )
 @click.option("--include", multiple=True, type=click.Choice(["authors", "references"]))
 @click.option("--include-raw", multiple=True)
-@click.option("--provider", type=click.Choice(["auto", "openalex", "service"]), default="auto", show_default=True)
+@click.option(
+    "--provider",
+    type=click.Choice(["auto", "openalex", "sciencedirect", "springer", "service"]),
+    default="auto",
+    show_default=True,
+)
 @click.option("--service-endpoint")
 @click.option("--service-token")
 @click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path))
@@ -157,18 +162,71 @@ def works_search_cmd(
 
 @works.command("get")
 @click.argument("identifier")
-@click.option("--provider", type=click.Choice(["auto", "openalex", "service"]), default="auto", show_default=True)
+@click.option(
+    "--provider",
+    type=click.Choice(["auto", "openalex", "sciencedirect", "springer", "service"]),
+    default="auto",
+    show_default=True,
+)
 @click.option("--service-endpoint")
 @click.option("--service-token")
 @click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path))
 @click.option("--output", "output_path", type=click.Path(dir_okay=False, path_type=Path))
 @click.option("--json", "as_json", is_flag=True)
-def works_get_cmd(identifier: str, provider: str, output_dir: Path | None, output_path: Path | None, as_json: bool) -> None:
+def works_get_cmd(
+    identifier: str,
+    provider: str,
+    service_endpoint: str | None,
+    service_token: str | None,
+    output_dir: Path | None,
+    output_path: Path | None,
+    as_json: bool,
+) -> None:
     """Get a single work."""
     from metasci_universe.api import works as works_api
 
     try:
-        result = _run(works_api.get(identifier, provider=provider, output_dir=str(output_dir) if output_dir else None))
+        result = _run(
+            works_api.get(
+                identifier,
+                provider=provider,
+                service_endpoint=service_endpoint,
+                service_token=service_token,
+                output_dir=str(output_dir) if output_dir else None,
+            )
+        )
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+    _emit_result(result, as_json=as_json, output_path=output_path)
+
+
+@works.command("fulltext")
+@click.argument("identifier")
+@click.option("--provider", type=click.Choice(["sciencedirect", "springer"]), default="sciencedirect", show_default=True)
+@click.option("--download-pdf", is_flag=True, help="Download the PDF when provider='springer' and a PDF link is available.")
+@click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path))
+@click.option("--output", "output_path", type=click.Path(dir_okay=False, path_type=Path))
+@click.option("--json", "as_json", is_flag=True)
+def works_fulltext_cmd(
+    identifier: str,
+    provider: str,
+    download_pdf: bool,
+    output_dir: Path | None,
+    output_path: Path | None,
+    as_json: bool,
+) -> None:
+    """Fetch full text for a single work."""
+    from metasci_universe.api import works as works_api
+
+    try:
+        result = _run(
+            works_api.fulltext(
+                identifier,
+                provider=provider,
+                download_pdf=download_pdf,
+                output_dir=str(output_dir) if output_dir else None,
+            )
+        )
     except Exception as exc:
         raise click.ClickException(str(exc)) from exc
     _emit_result(result, as_json=as_json, output_path=output_path)
@@ -242,6 +300,8 @@ def authors() -> None:
 @click.option("--limit", type=int, default=10, show_default=True)
 @click.option("--detail-level", type=click.Choice(["summary", "full"]), default="summary", show_default=True)
 @click.option("--provider", type=click.Choice(["auto", "openalex", "service"]), default="auto", show_default=True)
+@click.option("--service-endpoint")
+@click.option("--service-token")
 @click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path))
 @click.option("--output", "output_path", type=click.Path(dir_okay=False, path_type=Path))
 @click.option("--json", "as_json", is_flag=True)
@@ -317,7 +377,14 @@ def authors_profile_cmd(
 @click.option("--author-position", type=int, default=1, show_default=True)
 @click.option("--all-authors", is_flag=True)
 @click.option("--detail-level", type=click.Choice(["summary", "full"]), default="summary", show_default=True)
-@click.option("--provider", type=click.Choice(["auto", "openalex", "service"]), default="auto", show_default=True)
+@click.option(
+    "--provider",
+    type=click.Choice(["auto", "openalex", "sciencedirect", "springer", "service"]),
+    default="auto",
+    show_default=True,
+)
+@click.option("--service-endpoint")
+@click.option("--service-token")
 @click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path))
 @click.option("--output", "output_path", type=click.Path(dir_okay=False, path_type=Path))
 @click.option("--json", "as_json", is_flag=True)
@@ -327,6 +394,8 @@ def authors_from_work_cmd(
     all_authors: bool,
     detail_level: str,
     provider: str,
+    service_endpoint: str | None,
+    service_token: str | None,
     output_dir: Path | None,
     output_path: Path | None,
     as_json: bool,

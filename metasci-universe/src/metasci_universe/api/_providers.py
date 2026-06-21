@@ -9,7 +9,9 @@ from metasci_universe.providers.dblp_api import DblpAPIProvider
 from metasci_universe.providers.openalex_api import OpenAlexAPIProvider
 from metasci_universe.providers.openreview_api import OPENREVIEW_VENUE_PATTERNS, OpenReviewAPIProvider
 from metasci_universe.providers.pmlr import PMLR_VENUES, PMLRProvider
+from metasci_universe.providers.sciencedirect_api import ScienceDirectAPIProvider
 from metasci_universe.providers.service import ServiceProvider
+from metasci_universe.providers.springer import SpringerProvider
 from metasci_universe.schemas.conferences import ConferencePapersRequest
 
 
@@ -22,6 +24,10 @@ def get_provider(
     """Return the configured provider for Phase 1."""
     if provider in {"auto", "openalex"}:
         return OpenAlexAPIProvider()
+    if provider == "sciencedirect":
+        return ScienceDirectAPIProvider()
+    if provider == "springer":
+        return SpringerProvider()
     if provider == "service":
         return ServiceProvider(endpoint=service_endpoint, token=service_token)
     raise ValueError(f"Unsupported provider: {provider}")

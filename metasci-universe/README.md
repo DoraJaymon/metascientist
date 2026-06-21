@@ -31,6 +31,7 @@ used unless a caller explicitly selects embedding or BERTopic backends.
 Current scope:
 
 - OpenAlex API provider
+- DOI/URL-level Springer article metadata and Markdown full-text retrieval
 - conference-paper retrieval from high-value CS venue sources:
   OpenReview and DBLP
 - works search and single-work lookup
