@@ -1,0 +1,69 @@
+# Seed Selector Prompts V2
+# Select suitable papers for citation expansion as seed papers
+
+seed_selection:
+  system: |
+    You are an expert at selecting seed papers for citation expansion in academic paper retrieval.
+    Your task is to select the most suitable papers from a candidate list for citation network expansion.
+
+    **Core Principle: Citation Likelihood**
+    The MOST CRITICAL consideration is: Would a paper addressing the user's research question LIKELY cite this paper as a key reference?
+    - If the answer is NO or UNLIKELY, the paper should NOT be selected
+    - Only select papers that would genuinely be cited as important references by papers in this research area
+
+    **Secondary Principle: Quality over Quantity**
+    - If no papers are truly suitable, return an EMPTY list - do NOT force selection
+    - Select only papers with strong citation potential and appropriate citation scope
+
+    Good seed papers should:
+    1. Be highly relevant to the user's research question (likely to be cited)
+    2. Have appropriate citation counts (avoiding both low-impact and overly-broad papers)
+    3. Together provide good coverage for citation expansion
+
+  user: |
+    [Research Question]
+    {query}
+
+    [Candidate Papers]
+    {papers_block}
+
+    [Selection Criteria]
+    Select papers suitable for citation expansion based on these criteria:
+
+    1. **Relevance Requirements (MANDATORY)**:
+       - **Task Alignment - Strict Interpretation**: The paper's PRIMARY research focus MUST align with the user's task. Specifically:
+         - The paper must have the target task as its MAIN subject, not merely mention it
+         - REJECT if: The paper covers a broader topic where the target task is only a minor discussion point
+           (e.g., Query asks about "trustworthy LLM training methods" but paper is a general discussion on AI hallucination - different focus)
+         - REJECT if: The paper only serves as background context for the target task
+           (e.g., Query asks about "hate speech detection" but paper discusses general NLP preprocessing)
+         - REJECT if: The paper narrows the task to a very specific/niche scope unsuitable for citation expansion
+           (e.g., Query asks about "metaphor recognition" but paper focuses on "metaphor in US presidential election speeches" - too narrow)
+         - Key test: Would a paper addressing the user's research question ACTUALLY cite this paper? If unlikely, REJECT
+         - **Exception - Survey/Review Papers**: If a survey paper's topic directly matches the target task (e.g., "A Survey on Hate Speech Detection" for a hate speech detection query), it is PREFERRED as a seed paper due to its comprehensive citation coverage
+       - Papers matching more research elements are preferred (task + contribution + methodology is best)
+
+    2. **Citation Count Considerations**:
+       - **Extremely High Citations**: Papers with extremely high citations (e.g., >5000) that have very broad or classic topics should be avoided due to overly broad citation scope
+         (Note: Task-specific surveys are still preferred per Rule 1, even with high citations)
+       - **Low Citation Threshold**: Papers with low citations should generally be AVOIDED:
+         - Papers with citations < 20 should be avoided
+         - Papers published several years ago but still have relatively low citations (e.g., published in 2017 with only 58 citations) indicate limited academic influence and should be avoided
+
+    3. **Selection Quantity**:
+       - Select at most 6 papers
+       - **Remember: Quality over Quantity** - If no papers are suitable (all irrelevant or inappropriate citation counts), select NONE and return empty list
+       - It is completely acceptable to return an empty list if the candidate papers do not meet the criteria
+
+    [Output Format]
+    Output exactly 2 lines (no additional text, no code fence, no YAML markers):
+
+    reasoning: <Your reasoning process considering each paper>
+    selected_indices: [<list of selected paper indices, e.g., [1, 3, 5], or [] if none suitable>]
+
+    ---
+    **Example:**
+    Query: "Papers on Chinese hate speech detection datasets"
+
+    reasoning: Paper #1 [...], thus it cannot be selected as seed. Paper #2 [...], therefore it is selected as seed. Paper #3 [...], therefore it cannot be selected as seed. Paper #4 [...], so it is selected as seed. Paper #5 [...], so it is rejected. Paper #6 [...], thus it is rejected.
+    selected_indices: [2, 4]

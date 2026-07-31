@@ -671,8 +671,50 @@ TOOLS: dict[str, ToolDefinition] = {
 }
 
 
+_CITEFLOW_REGISTERED = False
+
+
+def _register_citeflow_tools() -> None:
+    """Merge the optional metasci-citeflow package's cf.* tools into the registry.
+
+    Registration is lazy rather than import-time: metasci-citeflow imports this package
+    for MetaSciResult, so importing it back at module scope would be circular.
+
+    CiteFlow validates each payload against its own pydantic model before dispatch, so
+    the adapter forwards the raw arguments and lets that model raise.
+    """
+    global _CITEFLOW_REGISTERED
+    if _CITEFLOW_REGISTERED:
+        return
+    try:
+        from metasci_citeflow import registry as cf_registry
+    except ImportError:
+        _CITEFLOW_REGISTERED = True
+        return
+    if not hasattr(cf_registry, "TOOLS"):  # still initialising, retry on the next call
+        return
+    _CITEFLOW_REGISTERED = True
+
+    def _make_handler(tool_name: str) -> ToolHandler:
+        async def _handler(payload: dict[str, Any]) -> MetaSciResult:
+            return await cf_registry.run_tool(tool_name, payload)
+
+        _handler.__name__ = f"_cf_{tool_name.replace('.', '_')}"
+        return _handler
+
+    for tool_name, tool in cf_registry.TOOLS.items():
+        TOOLS[tool_name] = ToolDefinition(
+            name=tool_name,
+            description=tool.description,
+            input_model=tool.input_model,
+            handler=_make_handler(tool_name),
+            examples=tool.examples,
+        )
+
+
 def list_tools() -> list[str]:
     """List available agent tools."""
+    _register_citeflow_tools()
     return sorted(TOOLS)
 
 
@@ -693,6 +735,8 @@ async def run_tool(name: str, arguments: dict[str, Any]) -> MetaSciResult:
 
 
 def _get_tool(name: str) -> ToolDefinition:
+    if name not in TOOLS:
+        _register_citeflow_tools()
     try:
         return TOOLS[name]
     except KeyError as exc:

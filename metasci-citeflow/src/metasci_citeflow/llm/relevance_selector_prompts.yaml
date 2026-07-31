@@ -1,0 +1,257 @@
+# Relevance Selector Prompts
+# Select papers highly relevant to user's research question
+
+relevance_selection:
+  system: |
+    You are an expert at evaluating research paper relevance for academic literature retrieval.
+    Your task is to select papers that are TRULY and HOLISTICALLY aligned with the user's research question.
+
+    **Core Principle: Quality over Quantity (宁缺毋滥)**
+    - This selection identifies potential TARGET papers - papers the user would actually want to read and cite
+    - Select at most 4 papers; returning an empty list is completely acceptable
+    - Do NOT force selection if no papers truly qualify
+
+  user: |
+    [Research Question]
+    {query}
+
+    [Structured Keywords]
+    {keywords_block}
+
+    [Candidate Papers]
+    {papers_block}
+
+    [Selection Criteria]
+    Select papers that are TRULY relevant to the user's research question. This requires deep analysis, not simple keyword matching.
+
+    1. **Task Alignment - Deep Analysis (MANDATORY)**:
+       - Go beyond keyword matching - evaluate the HOLISTIC alignment of research objectives
+       - Even when tasks APPEAR similar, they may be fundamentally different. REJECT in these cases:
+         - **Focus mismatch**: Query wants algorithm/method improvement, but paper focuses on evaluation/benchmarking (same task domain, different focus)
+         - **Contribution type mismatch**: Query wants algorithm/method improvement, but paper is theoretical discussion or a survey (not that surveys are bad - but if user wants methods, a survey doesn't meet the need)
+         - **Scope too narrow**: Paper restricts the task to a very specific/niche scenario that limits its generalizability
+           (e.g., Query: "metaphor recognition methods" vs Paper: "metaphor in US presidential election speeches" - too narrow)
+
+    2. **Element Matching with Priority**:
+       - Beyond task alignment, papers should match additional research elements (method, domain, constraints, etc.)
+       - **Priority Elements**: Elements explicitly emphasized in the query are MORE important than others
+       - When papers match the same NUMBER of elements, prefer:
+         (a) Papers covering PRIORITY elements over those covering peripheral elements
+         (b) Papers with higher academic impact (citations) when priority is similar
+
+    3. **Selection Limit**:
+       - Select AT MOST 4 papers
+       - Return empty list if no papers truly qualify
+
+    [Output Format]
+    Output exactly 2 lines (no additional text, no code fence, no YAML markers):
+
+    reasoning: <Your analysis process - see example below for expected depth>
+    selected_indices: [<list of selected paper indices ranked by relevance, e.g., [3, 1, 5], or [] if none qualify>]
+
+    ---
+    **Example:**
+    Query: "Deep learning methods to improve Chinese hate speech detection accuracy"
+
+    reasoning: [Understanding the Query] User wants papers that PROPOSE new DL methods to IMPROVE detection performance, specifically for Chinese. This means: (1) the paper must contribute a method/algorithm, not just analyze or evaluate; (2) the goal is performance improvement, not theoretical understanding. [First Pass] 8 papers - quickly exclude #2 (sentiment analysis - entirely different task) and #7 (English toxicity - wrong domain). [Deep Analysis] #1 "BERT for Chinese Hate Speech" - from abstract, it proposes an attention mechanism modification and reports accuracy gains → this is exactly what user needs: a method contribution aimed at improvement. #3 "Hate Speech Detection Benchmark" - despite "hate speech detection" in title, the paper's GOAL is to create evaluation resources, not to propose methods → task appears similar but purpose differs. #4 "CNN-based Hate Speech" - proposes method improvements but for English → method contribution matches, domain doesn't. #5 "Chinese Social Media Hate Speech Survey" - comprehensive review of the field, but user wants methods to USE, not a survey to READ → different utility even if topic overlaps. #6 "Multilingual Hate Speech Transformer" - proposes a new architecture with Chinese as one target language → method contribution with partial domain match. [Selection] #1 is ideal (method + Chinese + improvement). #6 contributes methods with Chinese coverage. Others either serve different purposes or wrong domain.
+    selected_indices: [1, 6]
+
+combined_selection:
+  system: |
+    You are an expert at evaluating keyword search results and selecting papers for academic literature retrieval.
+    Your task is to: (1) evaluate the overall quality of search results, (2) select highly relevant papers, and (3) select seed papers for citation expansion.
+
+  user: |
+    [Research Question]
+    {query}
+
+    [Structured Keywords]
+    {keywords_block}
+
+    [Candidate Papers - {paper_count} papers]
+    {papers_block}
+
+    [Task Overview]
+
+    Perform THREE evaluations on the search results:
+
+    **Step 1: Batch Evaluation (Overall Quality)**
+
+    Evaluate this batch of papers on two aspects:
+
+    1. **Task Alignment**: Do most papers' research tasks align with the query? If many papers have mismatched tasks, it suggests keywords are too narrow or incorrect.
+
+    2. **Citation Impact**: Do papers have reasonable influence? Citations should not all be very low (e.g., all <5). Median citation count should be roughly >6-7.
+
+    Rating scale:
+    - **2**: High relevance - good task alignment and reasonable citations
+    - **1**: Moderate - most tasks aligned and acceptable citations, but overall relevance could be better
+    - **0**: Poor - many task mismatches OR mostly very low citations
+
+    **Step 2: Select Relevant Papers (Strict Criteria - Smaller Set)**
+
+    Select papers that are HIGHLY relevant to the research question:
+
+    1. **Task Alignment (MANDATORY)**: The paper's research task MUST align with the user's question. If task is different, REJECT.
+
+    2. **Minimum Element Match**: Beyond task alignment, MUST match at least ONE additional research element (method, domain, research object, constraints, etc.). Papers matching only the task → REJECT.
+
+    3. **Ranking**: Rank by number of matching elements (most matched → first).
+
+    **Step 3: Select Seed Papers (Broader Criteria - Larger Set)**
+
+    Select papers suitable for citation expansion (broader than relevant papers):
+
+    1. **Closeness Requirement (MANDATORY)**: The research task MUST be closely related to user's question. Papers with loosely related or unrelated tasks → REJECT.
+
+    2. **Citation Count Considerations**:
+       - AVOID extremely high citations (>5000) - too broad citation scope
+       - AVOID very low citations (<10) - limited expansion value
+       - Consider total expansion burden: combined citations ~3000-4000 total
+
+    3. **Selection Quantity**: Select at most 5 seed papers.
+
+    **CRITICAL CONSTRAINT**: All relevant papers MUST be included in seed papers (relevant_indices ⊆ seed_indices). Seed papers is the larger set.
+
+    [Output Format]
+    Output exactly 6 lines (no additional text, no code fence, no YAML markers):
+
+    rating: <0, 1, or 2>
+    rating_reasoning: <Assess task alignment across papers, citation distribution (median/range), then justify the rating>
+    relevant_reasoning: <For each paper: assess task match and element matches, then decision. Be specific about what matches.>
+    relevant_indices: [<list of highly relevant paper indices ranked by relevance, e.g., [3, 1], or []>]
+    seed_reasoning: <For each paper: assess closeness to query and citation suitability, explain seed decisions. Ensure all relevant papers are included.>
+    seed_indices: [<list of seed paper indices (must contain all relevant_indices), e.g., [3, 1, 5], or []>]
+
+    ---
+    **Example:**
+    Query: "Chinese hate speech detection using deep learning"
+
+    rating: 1
+    rating_reasoning: Task alignment moderate - 4/8 papers on hate speech, others on sentiment/toxicity (related but not exact). Citations acceptable, median ~180, range 15-6800.
+    relevant_reasoning: #1 "Chinese Hate Speech with BERT": task=hate speech detection ✓, method=deep learning ✓, domain=Chinese ✓, 3 elements → SELECT. #2 "Sentiment Analysis": task=sentiment ✗ → REJECT. #3 "Hate Speech in English CNN": task=✓, method=deep learning ✓, 2 elements → SELECT. #4 "Hate Speech Overview": task=✓ but only 1 element → REJECT. #5 "Toxic Comment Detection with DL": task=related (toxicity) ✓, method=deep learning ✓, 2 elements → SELECT.
+    relevant_indices: [1, 5, 3]
+    seed_reasoning: From relevant: #1 (450 cites), #5 (220 cites), #3 (890 cites) all suitable → INCLUDE. From others: #4 (6800 cites, too high) → REJECT. #6 "Offensive Language Detection" (180 cites, closely related) → ADD. Final: relevant papers + #6.
+    seed_indices: [1, 5, 3, 6]
+
+batch_evaluation:
+  system: |
+    You are an expert at evaluating the quality of keyword search results for academic paper retrieval.
+
+  user: |
+    [Research Question]
+    {query}
+
+    [Search Results - {paper_count} papers]
+    {papers_block}
+
+    [Evaluation Criteria]
+    Evaluate this batch of papers on two aspects:
+
+    1. **Task Alignment**: Do most papers' research tasks align with the query? If many papers have mismatched tasks, it suggests keywords are too narrow or incorrect.
+
+    2. **Citation Impact**: Do papers have reasonable influence? Citations should not all be very low (e.g., all <5). Median citation count should be roughly >6-7.
+
+    [Rating]
+    - **2**: High relevance - good task alignment
+    - **1**: Moderate - most tasks aligned and acceptable citations, but overall relevance could be better
+    - **0**: Poor - many task mismatches OR mostly very low citations
+
+    [Output Format]
+    Output exactly 2 lines (no additional text, no code fence):
+
+    rating: <0, 1, or 2>
+    reasoning: <Analysis: assess task alignment across papers, citation distribution (median/range), then justify the rating>
+
+query_suggestion:
+  system: |
+    You are an expert at diagnosing academic paper search quality and suggesting query improvements.
+    Your task is to analyze search results and provide actionable suggestions for the next query.
+
+  user: |
+    [User's Research Question]
+    {query}
+
+    [Current Search Keywords]
+    "{current_keywords}"
+
+    [Structured Keywords from Query Analysis]
+    {keywords_block}
+
+    [Retrieved Papers - Top {paper_count}]
+    {papers_block}
+
+    [Statistics]
+    {stats_block}
+
+    [Evaluation Summary]
+    {eval_summary}
+
+    [Your Task]
+    Analyze the search results and diagnose potential issues. Based on your diagnosis, suggest how to modify the query for better results.
+
+    **Diagnosis Categories:**
+
+    1. **too_narrow**: Results are too narrow or niche
+       - Signals: Very low citations across most papers (median <20), old publication years (most before 2018), obscure venues, overly specific topics
+       - Causes: Too many constraint keywords, non-standard terminology, overly specific phrasing
+       - Solutions: Remove some constraint keywords, use more common/standard terms, try synonym expressions
+
+    2. **too_broad**: Results are too broad/scattered
+       - Signals: Papers cover very different topics, low task alignment despite high citations, diverse unrelated venues
+       - Causes: Keywords too general (e.g., just "deep learning"), missing task-specific terms
+       - Solutions: Add domain/task constraints, include specific method or application terms
+
+    3. **off_topic**: Results completely miss the target
+       - Signals: Almost no papers match the research task, topics are in wrong domain entirely
+       - Causes: Keywords fundamentally misrepresent the query, wrong terminology for the field
+       - Solutions: Rethink core concepts, use field-specific terminology, try completely different keywords
+
+    4. **good**: Results are satisfactory
+       - Signals: High rating (2/2), good number of relevant papers, reasonable citation distribution
+       - Note: Even if good, you may still suggest minor refinements
+
+    5. **other**: Other issues not covered above
+
+    **Analysis Guidelines:**
+    - Look at the TOPICS of retrieved papers - are they what user actually wants?
+    - Check if papers are from mainstream venues or obscure ones
+    - Consider if the terminology in abstracts matches standard academic usage
+    - Think about whether current keywords over-constrain or under-constrain the search
+
+    [Output Format]
+    Output exactly 4 lines (no additional text, no code fence):
+
+    diagnosis: <too_narrow | too_broad | off_topic | good | other>
+    analysis: <Detailed analysis of what's happening with current results - examine paper topics, citation patterns, year distribution, and identify the root cause>
+    suggestion: <Specific actionable suggestion - what to add, remove, or change in the keywords>
+    suggested_query: "<The actual suggested new query string to try next, or empty if diagnosis is 'good'>"
+
+    ---
+    **Example 1 (too_narrow):**
+    Query: "Chinese social media hate speech detection with BERT"
+    Current keywords: "Chinese Weibo hate speech BERT transformer attention"
+
+    diagnosis: too_narrow
+    analysis: Retrieved papers are highly specific to Weibo platform with very low citations (median 8). Most papers are from regional workshops (2019-2020). The combination of "Weibo + BERT + attention" is too restrictive. Standard term in this field is "hate speech detection" not platform-specific variants.
+    suggestion: Remove platform-specific term "Weibo" and simplify to core task. Use broader "social media" instead of specific platform. Remove "attention" as it over-constrains.
+    suggested_query: "Chinese hate speech detection social media deep learning"
+
+    **Example 2 (too_broad):**
+    Query: "Improving code completion accuracy with large language models"
+    Current keywords: "large language model code"
+
+    diagnosis: too_broad
+    analysis: Papers span very different areas - code summarization, code generation, code review, bug detection. Only 2/15 are actually about code completion. "Large language model code" is too vague and matches any LLM+code paper.
+    suggestion: Add task-specific term "code completion" or "autocomplete". Include accuracy/performance related terms to focus on improvement papers.
+    suggested_query: "large language model code completion accuracy"
+
+    **Example 3 (good):**
+    Query: "Transformer models for named entity recognition"
+    Current keywords: "transformer named entity recognition NER"
+
+    diagnosis: good
+    analysis: 8/15 papers directly address transformer-based NER with good citation distribution (median 156). Papers from ACL, EMNLP, NAACL venues. Year distribution reasonable (2019-2024). Current keywords capture the core task well.
+    suggestion: Results are good. Could optionally try adding specific domain (biomedical, legal) if user wants domain-specific papers.
+    suggested_query: ""
+

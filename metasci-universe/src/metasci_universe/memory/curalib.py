@@ -258,6 +258,11 @@ class PaperStore:
                     corpus_id = openalex_id
 
                 record = self._paper_to_record(paper, parent_ids)
+                if not record.corpus_id:
+                    # Papers arriving without a Semantic Scholar corpus id (e.g. straight
+                    # from the OpenAlex citation graph) are keyed by openalex_id; keep the
+                    # record's own primary key in sync with the store key.
+                    record.corpus_id = corpus_id
                 record.discovery_history = [discovery_record]
 
                 self._papers[corpus_id] = record
@@ -673,6 +678,7 @@ class PaperStore:
             "papers": {cid: rec.to_dict() for cid, rec in self._papers.items()},
             "current_round": self._current_round,
             "keyword_index": {k: list(v) for k, v in self._keyword_index.items()},
+            "api_index": {k: list(v) for k, v in self._api_index.items()},
             "saved_at": datetime.now().isoformat(),
         }
         Path(path).parent.mkdir(parents=True, exist_ok=True)

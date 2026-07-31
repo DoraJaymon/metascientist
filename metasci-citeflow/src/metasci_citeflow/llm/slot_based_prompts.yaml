@@ -1,0 +1,209 @@
+# Slot-Based Query Analyzer Prompts
+# 基于研究要素槽位的查询分析器
+
+slot_keywords:
+  system: |
+    You are an expert at analyzing academic research questions to extract structured search keywords.
+    Your task is to identify research elements (slots) and their modifiers through syntactic analysis,
+    then prioritize them for effective academic paper retrieval.
+
+  user: |
+    Analyze the following research question and extract structured keywords for academic retrieval.
+
+    Query: "{query}"
+
+    Follow this reasoning workflow step by step:
+
+    **Step 1: Syntactic Analysis**
+    Perform a loose syntactic parse of the question. Identify:
+    - Main noun phrases and their HEAD NOUNS (the central noun that other words modify)
+    - Modifier relationships: adjectives, attributive nouns, prepositional phrases, relative clauses
+    - Key verbs that indicate actions/contributions (e.g., "construct", "propose", "evaluate")
+
+    CRITICAL: Distinguish between:
+    - **Attributive modifiers** (adjectives/nouns directly modifying a head noun): "Chinese hate speech" → "Chinese" modifies "hate speech"
+    - **Independent noun phrases** (have their own head noun): "Japanese social media" is a complete NP with "media" as head
+
+    Note: Be flexible with academic compound terms (e.g., "sentiment analysis", "hate speech" should be treated as units).
+
+    **Step 2: Research Element Identification**
+    Identify research elements present in the question. Common types:
+    - **research_task**: The core research problem/task (always a noun phrase with its own head)
+    - **contribution**: What the paper delivers (dataset, benchmark, model, lexicon, etc.)
+    - **methodology**: Approach or technique used (usually introduced by "using", "with", "based on")
+
+    Other possible independent elements (MUST have their own head noun or be a prepositional/clausal phrase):
+    - Time period: "during COVID-19", "in 2020s"
+    - Data source: "from Twitter", "on social media"
+    - Evaluation: "evaluated with BARTScore", "on GLUE benchmark"
+    - Domain/setting: "in clinical settings", "for low-resource languages"
+
+    IMPORTANT: A single adjective or attributive noun (like "Chinese", "biomedical", "multimodal") that directly modifies another noun is NOT an independent element - it's a modifier of that noun.
+
+    For each identified element, extract the HEAD NOUN. Output format: head_noun (element_type)
+
+    **Step 3: Priority Ranking**
+    Rank the identified **research elements** (from Step 2) by retrieval importance:
+    1. research_task always has highest priority
+    2. Other elements ranked by user intent significance
+
+    Key principle:
+    - **Research elements**: Independent noun phrases with their own head (participate in ranking)
+    - **Modifiers**: Attributive words that describe a head noun (attach to that head in output, do NOT rank separately)
+
+    Output the ranking as: element1 > element2 > element3 ...
+
+    **Step 4: Structured Output**
+    For each research element in priority order, output a tuple:
+    - (head_term, modifier) if the element has attributive modifiers
+    - (head_term,) if no modifier
+
+    Canonicalization rules:
+    - Use singular/lemmatized forms (e.g., "summarization" not "summaries")
+    - Use standard academic terminology
+    - Preserve important compound terms (e.g., "hate speech", "named entity recognition")
+
+    **Output Format (exactly 2 lines):**
+    reasoning: <Step 1-3 reasoning in a concise paragraph>
+    core_keywords: [("term1", "modifier1"), ("term2",), ("term3", "modifier3"), ...]
+
+    IMPORTANT: The core_keywords must be a valid Python list of tuples with quoted strings.
+    Use double quotes for all string values to ensure proper parsing.
+
+    ---
+    **Example 1:**
+    Query: "Are there papers on Korean sentiment analysis that release a slang dictionary while building the corpus?"
+
+    reasoning: Syntactic parse: "sentiment analysis" is the core task noun phrase, with "Korean" as its attributive modifier. "Dictionary" and "corpus" are contribution nouns, with "slang" modifying "dictionary". Element identification: sentiment analysis (research_task), dictionary (contribution), corpus (contribution). "Korean" directly modifies "sentiment analysis" so it's a modifier, not an independent element. Priority ranking: sentiment analysis > dictionary > corpus (task first, then contributions in order of specificity).
+    core_keywords: [("sentiment analysis", "Korean"), ("dictionary", "slang"), ("corpus",)]
+
+    ---
+    **Example 2:**
+    Query: "Find papers that construct a benchmark dataset for evaluating multimodal dialogue systems"
+
+    reasoning: Parsing shows "dialogue system" as the research task (with "multimodal" as modifier), and "dataset" as contribution (with "benchmark" as modifier). Both modifiers are attributive adjectives, not independent elements. Element identification: dialogue system (research_task), dataset (contribution). Ranking: dialogue system > dataset.
+    core_keywords: [("dialogue system", "multimodal"), ("dataset", "benchmark")]
+
+    ---
+    **Example 3:**
+    Query: "Looking for named entity recognition papers that construct datasets using distant supervision during COVID-19"
+
+    reasoning: "Named entity recognition" is the research task (compound noun, no modifier). "Dataset" is the contribution. "Distant supervision" is the methodology (introduced by "using"). "During COVID-19" is a temporal constraint - this IS an independent prepositional phrase, not a modifier of any noun. Element identification: named entity recognition (research_task), dataset (contribution), distant supervision (methodology), COVID-19 (time_period). Priority: named entity recognition > dataset > distant supervision > COVID-19.
+    core_keywords: [("named entity recognition",), ("dataset",), ("distant supervision",), ("COVID-19",)]
+
+# 将结构化关键词转换为搜索字符串（作为slot_keywords对话的延续）
+format_search_queries:
+  system: |
+    You are an expert at composing academic search queries from structured keywords.
+    Your goal is to generate multiple search strings that balance precision and recall for paper retrieval.
+
+  user: |
+    Based on the structured keywords you just extracted, generate search query strings.
+
+    Structured Keywords: {keywords}
+
+    **Rules:**
+    1. The research_task MUST appear in ALL search strings
+    2. CRITICAL: One of the first TWO queries MUST be a pure research_task query (containing ONLY the research_task with/without its modifier, no other elements)
+    3. Generate 2-5 search strings with different term combinations
+    4. Modifier handling:
+       - Include modifier for research_task if it adds meaningful specificity
+       - For other elements, generally OMIT modifiers initially (avoid over-constraining)
+       - Exception: if the head term alone is too generic, add its modifier
+    5. If the research_task is very common/ambiguous (e.g., "model", "system") and lacks a modifier, the pure research_task query should include its modifier if available
+    6. **Ordering strategy**: Put queries most likely to find relevant papers FIRST, but avoid starting too narrow
+       - NOT simply "broad to specific" - prioritize by expected retrieval success
+       - Consider: Does this combination represent a common research direction? Is it too niche?
+       - Balance specificity and coverage
+    7. Use lowercase for all terms
+    8. **Provide reasoning**: Explain ordering rationale and why certain term combinations were chosen
+
+    **Output Format:**
+    reasoning: <explain the ordering strategy and term combination choices>
+    query1
+    query2
+    query3
+
+    ---
+    **Example 1:**
+    Structured Keywords: [("toxic comment detection", "Japanese"), ("dataset", "annotated")]
+
+    reasoning: Start with task+language (Japanese toxic comment detection) as it's specific enough to filter relevant papers while not over-constraining. Adding "dataset" second targets the contribution requirement.
+    japanese toxic comment detection
+    japanese toxic comment detection dataset
+
+    ---
+    **Example 2:**
+    Structured Keywords: [("program synthesis",), ("neural network",), ("benchmark",)]
+
+    reasoning: "Program synthesis" alone is a well-defined research area likely to return relevant results, so start there. Add "neural network" second as it's a common methodology in this field. "Benchmark" third for papers with evaluation focus.
+    program synthesis
+    program synthesis neural network
+    program synthesis benchmark
+
+    ---
+    **Example 3:**
+    Structured Keywords: [("named entity recognition",), ("dataset",), ("distant supervision",), ("biomedical",)]
+
+    reasoning: NER+biomedical first combines task with domain constraint (common pairing). NER alone second to ensure pure task coverage (required by Rule 1). NER+dataset third targets contribution. NER+distant supervision fourth is more specific methodology.
+    named entity recognition biomedical
+    named entity recognition
+    named entity recognition dataset
+    named entity recognition distant supervision
+
+# 提取用于硬匹配的高区分度词汇
+extract_discriminative_terms:
+  system: |
+    You are an expert at identifying discriminative terms for academic paper retrieval.
+    Your goal is to find terms that can distinguish target papers from other papers in the same research area through exact string matching.
+
+  user: |
+    Based on the structured keywords you extracted, identify terms with high discriminative power for hard matching within a pool of similar-domain papers.
+
+    Structured Keywords: {keywords}
+
+    **Key Insight:**
+    - Research task terms (e.g., "hate speech", "sentiment analysis") have LOW discriminative power because most papers in the same domain contain them
+    - Good discriminative terms are:
+      - Specific nouns that are hard to substitute (e.g., language names, specialized terminology)
+      - Uncommon in the general field but essential for the target paper
+      - Modifiers that narrow down the scope significantly
+      - Methodology/tool names that aren't universally used
+
+    **Task:**
+    1. Analyze each term from the structured keywords for its discriminative power
+    2. Optionally add potential synonyms or related discriminative terms if they're clearly relevant
+    3. Assign a discriminability score (1-10):
+       - Low (1-3): Common terms - research task names, generic contributions
+       - Medium (4-7): Moderately distinctive - specific methodologies, domain modifiers
+       - High (8-10): Highly distinctive - language/region specifiers, rare terminology, proper nouns
+
+    **Output Format (YAML format):**
+    reasoning: <explain discriminability assessment for key terms>
+    terms:
+      term1: score1
+      term2: score2
+
+    ---
+    **Example 1:**
+    Structured Keywords: [("sentiment analysis", "Korean"), ("dictionary", "slang"), ("corpus",)]
+
+    reasoning: "Korean" is highly distinctive as a language specifier (8). "Slang" is moderately distinctive, specifying a particular linguistic resource type (6). "Dictionary" and "corpus" are common contribution types (3). "Sentiment analysis" is the research task, very common in this field (1).
+    terms:
+      Korean: 8
+      slang: 6
+      dictionary: 3
+      corpus: 3
+      sentiment analysis: 1
+
+    ---
+    **Example 2:**
+    Structured Keywords: [("named entity recognition",), ("dataset",), ("distant supervision",), ("biomedical",)]
+
+    reasoning: "Biomedical" is a distinctive domain specifier (7). "Distant supervision" is a specific methodology (6). "Dataset" is a generic contribution (2). "Named entity recognition" is the research task (1). Adding "weak supervision" as a relevant synonym for the methodology (5).
+    terms:
+      biomedical: 7
+      distant supervision: 6
+      weak supervision: 5
+      dataset: 2
+      named entity recognition: 1

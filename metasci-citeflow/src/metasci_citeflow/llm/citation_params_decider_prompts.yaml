@@ -1,0 +1,138 @@
+# Citation Parameters Decider Prompts
+# 1. Decide optimal year_start and min_citations for citation expansion
+# 2. Decide optimal year_start and citation_range for seed paper selection
+
+citation_params_decision:
+  system: |
+    You are an expert at optimizing citation expansion parameters for academic paper retrieval.
+    Your task is to analyze the temporal and citation distributions of seed papers and high-scoring papers,
+    then decide optimal parameters for citation expansion to maximize discovery of relevant target papers.
+
+  user: |
+    [Task Context]
+    We are expanding citations from seed papers to discover relevant target papers.
+    The year_end is fixed at {year_end}.
+    You need to decide:
+    1. year_start: The earliest publication year for target papers (typically between 2015-2020)
+    2. min_citations: Minimum citation count threshold for target papers (0-5 recommended, cannot exceed 5)
+
+    [Input Data]
+    Total citations from seed papers: {total_seed_citations}
+
+    Citation count distribution (seed + high-scoring papers):
+    {citation_distribution}
+
+    Publication year distribution (seed + high-scoring papers):
+    {year_distribution}
+
+    [Decision Criteria]
+
+    **1. year_start Selection (Typically 2015-2020)**:
+       - Analyze the year distribution to identify the temporal concentration
+       - If most papers are concentrated in recent years (e.g., 2019+), set year_start closer to year_end (e.g., 2018-2020)
+       - If papers span a wider time range, set year_start earlier (e.g., 2015-2017) to capture comprehensive coverage
+       - Consider field characteristics: rapidly evolving fields prefer recent years, established fields need broader temporal scope
+       - Typically not earlier than 2015.
+    **2. min_citations Selection (Must be 0-5)**:
+       - **If total_seed_citations ≤ 4000**: Set min_citations = 0 (manageable data volume, no filtering needed)
+       - **If 4000 < total_seed_citations ≤ 7000**: Set min_citations = 1-2 (light filtering to reduce noise)
+       - **If total_seed_citations > 7000**: Set min_citations = 2-5 (moderate filtering to manage volume)
+       - **CRITICAL**: Never exceed 5 to avoid missing important but less-cited papers
+       - Adjust based on citation distribution: if many low-citation papers, slightly increase threshold
+
+    [Output Format]
+    Output exactly 3 lines (no additional text, no code fence, no YAML markers):
+
+    reasoning: <Brief analysis of distributions and rationale for parameter choices>
+    year_start: <integer year value>
+    min_citations: <integer between 0-5>
+
+    ---
+    **Example 1:**
+    total_seed_citations = 2200
+    year_distribution = {{2019: 3, 2020: 5, 2021: 8, 2022: 6, 2023: 4}}
+    citation_distribution = {{0-50: 12, 51-100: 8, 101-500: 6, 501+: 2}}
+
+    reasoning: Total citations (2200) are manageable, no filtering needed. Papers concentrated in 2019-2023 suggest recent work is most relevant. Set year_start=2018 for focused recent coverage.
+    year_start: 2018
+    min_citations: 0
+
+    ---
+    **Example 2:**
+    total_seed_citations = 8600
+    year_distribution = {{2015: 2, 2016: 4, 2017: 6, 2018: 8, 2019: 7, 2020: 6, 2021: 5, 2022: 3, 2023: 2}}
+    citation_distribution = {{0-50: 15, 51-100: 12, 101-500: 8, 501+: 3}}
+
+    reasoning: High citation volume (8600) requires filtering. Wide temporal distribution (2015-2023) indicates established field needing broad coverage. Set year_start=2016, min_citations=3 for quality filtering while preserving important papers.
+    year_start: 2016
+    min_citations: 3
+
+seed_selection_params_decision:
+  system: |
+    You are an expert at optimizing seed paper selection parameters for academic paper retrieval.
+    Your task is to analyze the temporal and citation distributions of high-scoring papers,
+    then decide optimal filtering parameters to select suitable seed papers for subsequent citation expansion.
+
+  user: |
+    [Task Context]
+    We need to select seed papers from high-scoring candidates for citation expansion.
+    The year_end is fixed at {year_end}.
+    You need to decide:
+    1. year_start: The earliest publication year for seed papers (typically 2015-2020)
+    2. min_citations: Minimum citation count threshold (must be 20-50)
+    3. max_citations: Maximum citation count threshold (typically 600-3000)
+
+    [Input Data]
+    High-scoring papers citation distribution:
+    {citation_distribution}
+
+    High-scoring papers year distribution:
+    {year_distribution}
+
+    [Decision Criteria]
+
+    **1. year_start Selection**:
+       - Analyze temporal distribution to identify concentration patterns
+       - Recent concentration → set year_start closer to year_end
+       - Wider temporal span → set year_start earlier for broader coverage
+       - Typical range: 2015-2020
+
+    **2. min_citations Selection (Must be 20-50)**:
+       - Seed papers need sufficient citation influence for valuable expansion
+       - Balance between quality threshold and candidate pool size
+       - Typical range: 20-50
+
+    **3. max_citations Selection (Typically 600-3000)**:
+       - Exclude overly-cited papers (surveys, classics) with too broad citation scope
+       - Goal: Remove top highly-cited outliers while retaining most suitable candidates
+       - Analyze distribution to identify appropriate upper bound
+       - Typical range: 600-3000
+
+    [Output Format]
+    Output exactly 4 lines (no additional text, no code fence, no YAML markers):
+
+    reasoning: <Brief analysis and rationale for parameter choices>
+    year_start: <integer year value>
+    min_citations: <integer between 20-50>
+    max_citations: <integer typically between 600-3000>
+
+    ---
+    **Example 1:**
+    year_distribution = {{2019: 5, 2020: 8, 2021: 12, 2022: 10, 2023: 6}}
+    citation_distribution = {{"20-50": 10, "51-100": 15, "101-300": 12, "301-600": 6, "601-1000": 3, "1000+": 1}}
+
+    reasoning: Papers concentrated in 2019-2023 suggest recent field. Most papers under 600 citations with few highly-cited outliers. Set year_start=2018, min_citations=30 for influence threshold, max_citations=800 to exclude top outliers.
+    year_start: 2018
+    min_citations: 30
+    max_citations: 800
+
+    ---
+    **Example 2:**
+    year_distribution = {{2015: 3, 2016: 6, 2017: 8, 2018: 9, 2019: 8, 2020: 7, 2021: 5, 2022: 3}}
+    citation_distribution = {{"20-100": 8, "101-300": 15, "301-600": 12, "601-1000": 8, "1001-2000": 5, "2000+": 2}}
+
+    reasoning: Wide temporal span indicates established field. Citation distribution shows substantial papers in 600-2000 range. Set year_start=2016 for broad coverage, min_citations=40 for quality, max_citations=1800 to retain most candidates while excluding top surveys.
+    year_start: 2016
+    min_citations: 40
+    max_citations: 1800
+
