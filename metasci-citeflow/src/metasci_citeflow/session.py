@@ -104,6 +104,7 @@ class Session:
             "rounds": [],
             "judged_ids": [],
             "cocitation": {},
+            "direction_diagnosis": {},
             "tool_calls": [],
         }
         session = cls(sid, directory, resolved, PaperStore(), ledger)
@@ -239,6 +240,30 @@ class Session:
     @property
     def cocitation(self) -> Dict[str, Any]:
         return self.ledger.get("cocitation", {})
+
+    def set_direction_diagnosis(self, diagnosis: Dict[str, Any]) -> None:
+        """Persist the agent's direction coverage diagnosis.
+
+        Expected structure::
+
+            {
+              "directions": {
+                "unlearning": {"strength": "strong", "hub_count": 6,
+                               "key_hubs": ["Machine Unlearning", ...]},
+                "calibration": {"strength": "missing", "hub_count": 0},
+              },
+              "noise_hubs_excluded": ["Adam", "BERT"],
+              "gaps_addressed": ["calibration"],
+              "gaps_remaining": ["model editing"],
+              "phase": "post_round1"
+            }
+        """
+        self.ledger["direction_diagnosis"] = diagnosis
+        self.save()
+
+    @property
+    def direction_diagnosis(self) -> Dict[str, Any]:
+        return self.ledger.get("direction_diagnosis", {})
 
     def log_tool_call(self, tool: str, arguments: Dict[str, Any], summary: Dict[str, Any]) -> None:
         self.ledger.setdefault("tool_calls", []).append(

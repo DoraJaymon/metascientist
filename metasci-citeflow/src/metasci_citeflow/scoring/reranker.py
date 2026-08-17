@@ -60,7 +60,10 @@ class BGEReranker:
         model: Optional[str] = None,
         client: Any = None,
     ) -> None:
-        self.api_token = api_token or os.getenv("RERANKER_API_TOKEN")
+        # ``None`` means use process configuration; an explicit empty string is
+        # intentionally treated as no credential. This keeps callers and tests
+        # able to disable reranking even when a project .env is loaded.
+        self.api_token = os.getenv("RERANKER_API_TOKEN") if api_token is None else api_token
         self.url = url or DEFAULT_URL
         self.model = model or DEFAULT_MODEL
         self._client = client

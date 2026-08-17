@@ -76,9 +76,16 @@ class PapersSearchRequest(_Base):
         default=None,
         description="Search strings; defaults to the session analysis' search_queries.",
     )
+    engine: Optional[str] = Field(
+        default=None,
+        description=(
+            "'s2' | 'openalex'. When set, only that engine is used (no fallback). "
+            "When omitted, tries Semantic Scholar first with OpenAlex fallback."
+        ),
+    )
     limit: Optional[int] = Field(default=None, ge=1, le=1000)
     year: Optional[str] = Field(
-        default=None, description="Semantic Scholar year range, e.g. '2015-2023'."
+        default=None, description="Year range, e.g. '2015-2023'."
     )
     resolve_openalex: bool = Field(
         default=True,
@@ -86,6 +93,12 @@ class PapersSearchRequest(_Base):
             "Resolve results to OpenAlex work ids. Disabling this leaves papers that "
             "cannot take part in citation expansion."
         ),
+    )
+    top_k_preview: int = Field(
+        default=10,
+        ge=0,
+        le=50,
+        description="Number of top papers to include in the response for quick diagnosis.",
     )
     session_dir: Optional[str] = None
 
@@ -116,6 +129,14 @@ class CoCiteRequest(_Base):
 
 class ExpandRefsGuidedRequest(_Base):
     session_id: str
+    source_ids: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Explicit store paper IDs to expand references from. When set, bypasses "
+            "the automatic search_rank-based selection. Use this when the agent has "
+            "diagnosed which papers are better expansion sources."
+        ),
+    )
     top_k_co_cited: Optional[int] = Field(default=None, ge=1)
     max_citing_papers: Optional[int] = Field(default=None, ge=1)
     limit_per_work: Optional[int] = Field(default=None, ge=1, le=500)

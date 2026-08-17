@@ -84,8 +84,9 @@ class PaperRecord:
 
     # --- Discovery history ---
     discovery_history: List[Dict[str, Any]] = field(default_factory=list)
-    # Each record: {"round": int, "source": str, "keywords": str|None,
-    #               "parent_ids": list|None, "search_rank": int|None}
+    # Each record: {"round": int, "source": str, "phase": str|None,
+    #               "keywords": str|None, "parent_ids": list|None,
+    #               "search_rank": int|None}
 
     # --- Citation relationships ---
     parent_paper_ids: Set[str] = field(default_factory=set)

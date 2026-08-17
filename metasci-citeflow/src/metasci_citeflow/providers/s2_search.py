@@ -135,16 +135,18 @@ class SemanticScholarSearchClient:
 
     async def _get(self, path: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         client = await self._get_client()
-        rate_limited = False
+        transient_failure = False
+        last_status = 0
         for attempt in range(self.MAX_RETRIES):
             await self._throttle()
             try:
                 response = await client.get(f"{S2_BASE}{path}", params=params)
                 self._last_request = time.monotonic()
+                last_status = response.status_code
                 if response.status_code == 200:
                     return response.json()
-                if response.status_code == 429:
-                    rate_limited = True
+                if response.status_code == 429 or response.status_code >= 500:
+                    transient_failure = True
                     retry_after = response.headers.get("Retry-After")
                     wait = (
                         float(retry_after)
@@ -153,7 +155,8 @@ class SemanticScholarSearchClient:
                     )
                     wait = min(60.0, wait + random.uniform(0.1, 0.5))
                     logger.warning(
-                        "Semantic Scholar rate limit; waiting %.1fs (attempt %d/%d)",
+                        "Semantic Scholar HTTP %s; waiting %.1fs (attempt %d/%d)",
+                        response.status_code,
                         wait,
                         attempt + 1,
                         self.MAX_RETRIES,
@@ -163,14 +166,14 @@ class SemanticScholarSearchClient:
                 logger.warning("Semantic Scholar HTTP %s for %s", response.status_code, path)
                 return None
             except Exception as exc:
+                transient_failure = True
                 logger.warning("Semantic Scholar request error: %s", exc)
                 await asyncio.sleep(self.request_interval * (2**attempt))
 
-        if rate_limited:
-            # Distinguish "provider unavailable" from "no results" so the caller can
-            # fall back to OpenAlex rather than silently proceeding with an empty store.
+        if transient_failure:
             raise S2Unavailable(
-                f"Semantic Scholar rate-limited after {self.MAX_RETRIES} retries. "
+                f"Semantic Scholar unavailable after {self.MAX_RETRIES} retries "
+                f"(last status: {last_status}). "
                 "Set S2_API_KEY for a dedicated quota."
             )
         return None

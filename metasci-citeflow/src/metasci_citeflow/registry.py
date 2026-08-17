@@ -180,28 +180,66 @@ async def _papers_search(req: S.PapersSearchRequest, deps: Optional[CiteFlowDeps
     if year is None and profile.init_search.year:
         year = f"{profile.init_search.year[0]}-{profile.init_search.year[1]}"
 
+    engine = (req.engine or "").lower().strip() or None
+
     per_query: List[tuple] = []
     per_query_report: List[Dict[str, Any]] = []
     diagnostics: List[str] = []
     provider = "semantic_scholar"
+    failed = False
 
-    try:
-        s2 = resolved_deps.require_s2()
-        for query in queries:
-            papers = await s2.search(query, limit=limit, year=year)
-            per_query.append((query, papers))
-            per_query_report.append({"query": query, "found": len(papers)})
-    except ProviderUnavailable as exc:
-        # The original pipeline had the same fallback: prefer Semantic Scholar's keyword
-        # recall, but keep going on OpenAlex rather than starting from an empty store.
-        diagnostics.append(f"Semantic Scholar unavailable ({exc}); fell back to OpenAlex search.")
+    if engine == "openalex":
         provider = "openalex"
-        per_query, per_query_report = [], []
         openalex = resolved_deps.require_openalex()
         for query in queries:
             papers = await openalex.search(query, limit=limit, year=year)
             per_query.append((query, papers))
             per_query_report.append({"query": query, "found": len(papers)})
+    elif engine == "s2":
+        try:
+            s2 = resolved_deps.require_s2()
+            for query in queries:
+                papers = await s2.search(query, limit=limit, year=year)
+                per_query.append((query, papers))
+                per_query_report.append({"query": query, "found": len(papers)})
+        except ProviderUnavailable as exc:
+            diagnostics.append(f"Semantic Scholar unavailable ({exc}); no fallback (engine=s2).")
+            failed = True
+    else:
+        try:
+            s2 = resolved_deps.require_s2()
+            for query in queries:
+                papers = await s2.search(query, limit=limit, year=year)
+                per_query.append((query, papers))
+                per_query_report.append({"query": query, "found": len(papers)})
+        except ProviderUnavailable as exc:
+            diagnostics.append(
+                f"Semantic Scholar unavailable ({exc}); fell back to OpenAlex search."
+            )
+            provider = "openalex"
+            per_query, per_query_report = [], []
+            openalex = resolved_deps.require_openalex()
+            for query in queries:
+                papers = await openalex.search(query, limit=limit, year=year)
+                per_query.append((query, papers))
+                per_query_report.append({"query": query, "found": len(papers)})
+
+    if failed:
+        return {
+            "session_id": session.session_id,
+            "provider": "s2",
+            "status": "failed",
+            "per_query": per_query_report,
+            "merged": 0,
+            "added": 0,
+            "resolved": 0,
+            "unresolved": [],
+            "openalex_coverage": 0.0,
+            "paper_ids": [],
+            "top_papers": [],
+            "total": len(session.store.get_all_papers()),
+            "diagnostics": diagnostics,
+        }
 
     merged = merge_search_results(per_query)
 
@@ -220,13 +258,24 @@ async def _papers_search(req: S.PapersSearchRequest, deps: Optional[CiteFlowDeps
         phase="search",
         expanded_ids=paper_ids,
         new_ids=[record.openalex_id or record.corpus_id for record in new_records],
-        params={"queries": queries, "limit": limit, "year": year},
+        params={"queries": queries, "limit": limit, "year": year, "engine": engine},
     )
 
     resolved_count = sum(1 for paper in merged if paper.get("openalex_id"))
+
+    top_papers: List[Dict[str, Any]] = []
+    for paper in merged[: req.top_k_preview]:
+        top_papers.append({
+            "rank": paper.get("search_rank", 0),
+            "title": (paper.get("title") or "")[:160],
+            "year": paper.get("year") or paper.get("publication_year"),
+            "citation_count": paper.get("cited_by_count") or paper.get("citation_count") or 0,
+        })
+
     return {
         "session_id": session.session_id,
         "provider": provider,
+        "status": "ok",
         "per_query": per_query_report,
         "merged": len(merged),
         "added": len(new_records),
@@ -234,6 +283,7 @@ async def _papers_search(req: S.PapersSearchRequest, deps: Optional[CiteFlowDeps
         "unresolved": unresolved,
         "openalex_coverage": round(resolved_count / len(merged), 4) if merged else 0.0,
         "paper_ids": paper_ids,
+        "top_papers": top_papers,
         "total": len(session.store.get_all_papers()),
         "diagnostics": diagnostics,
     }
@@ -331,12 +381,38 @@ async def _co_cite(req: S.CoCiteRequest, deps: Optional[CiteFlowDeps]) -> Dict[s
             "in_store": record is not None,
         }
 
+    # Build expansion candidates: store papers ranked by how many co-cited
+    # works (count >= 3) they cite.  Uses all qualified hubs, not just the
+    # strong bucket, so the agent's A/B/C classification replaces the fixed
+    # upper-limit cutoff.
+    hubs_for_candidates = [ref for ref, c in counts.items() if c >= 3]
+    citer_hub_counts: Dict[str, int] = {}
+    for ref in hubs_for_candidates:
+        for citer in citing_map.get(ref, []):
+            citer_hub_counts[citer] = citer_hub_counts.get(citer, 0) + 1
+    ranked_citers = sorted(citer_hub_counts, key=lambda c: citer_hub_counts[c], reverse=True)
+
+    expansion_candidates: List[Dict[str, Any]] = []
+    for citer_id in ranked_citers[:30]:
+        record = session.store.get_record(citer_id)
+        if record is None:
+            continue
+        expansion_candidates.append({
+            "paper_id": citer_id,
+            "title": (record.title or "")[:160],
+            "year": record.year,
+            "citation_count": record.citation_count,
+            "co_cited_works_cited": citer_hub_counts[citer_id],
+            "search_rank": record.search_rank,
+        })
+
     return {
         "session_id": session.session_id,
         "co_cited": [_summary(ref) for ref in ordered[:50]],
         "co_cited_total": len(ordered),
         "strong_bucket": len(strong_ids),
         "weak_bucket": len(weak_ids),
+        "expansion_candidates": expansion_candidates,
         "fetched": fetched,
         "added": added,
         "min_count": min_count,
@@ -351,20 +427,24 @@ async def _expand_refs_guided(
 
     session = Session.open(req.session_id, root=_root(req.session_dir))
     profile = session.profile
-    payload = session.cocitation
-    if not payload:
-        raise ValueError("Run cf.citations.co_cite before cf.citations.expand_refs_guided")
-
+    limit_per_work = req.limit_per_work or profile.refs.max_per_seed
     top_k = req.top_k_co_cited or profile.refs.top_k_co_cited
     max_citing = req.max_citing_papers or profile.refs.max_citing_papers
-    limit_per_work = req.limit_per_work or profile.refs.max_per_seed
 
-    source_ids = cc.select_papers_to_expand(
-        payload.get("ordered", [])[:top_k],
-        payload.get("citing_map", {}),
-        payload.get("search_ranks", {}),
-        max_citing_papers=max_citing,
-    )
+    if req.source_ids:
+        source_ids = req.source_ids
+    else:
+        payload = session.cocitation
+        if not payload:
+            raise ValueError("Run cf.citations.co_cite before cf.citations.expand_refs_guided")
+
+        source_ids = cc.select_papers_to_expand(
+            payload.get("ordered", [])[:top_k],
+            payload.get("citing_map", {}),
+            payload.get("search_ranks", {}),
+            max_citing_papers=max_citing,
+        )
+
     if not source_ids:
         return {
             "session_id": session.session_id,
@@ -391,6 +471,7 @@ async def _expand_refs_guided(
         expanded_ids=list(dict.fromkeys(expanded_ids)),
         new_ids=[record.openalex_id or record.corpus_id for record in new_records],
         params={
+            "source_ids_explicit": req.source_ids is not None,
             "top_k_co_cited": top_k,
             "max_citing_papers": max_citing,
             "limit_per_work": limit_per_work,
@@ -1076,16 +1157,17 @@ TOOLS: Dict[str, CiteFlowTool] = {
         CiteFlowTool(
             name="cf.papers.search",
             description=(
-                "Run the session's search queries against Semantic Scholar, merge and "
-                "de-duplicate, then resolve every hit to an OpenAlex work id. The "
-                "resolution step is what makes citation expansion possible at all - "
-                "check the reported openalex_coverage before expanding."
+                "Run search queries against Semantic Scholar or OpenAlex (set engine='s2' "
+                "or engine='openalex' to choose explicitly; omit for s2-with-fallback). "
+                "Merges and de-duplicates results, resolves to OpenAlex work ids, and "
+                "returns top_papers preview (title/year/citation_count) for quick quality "
+                "diagnosis. Check status='ok'|'failed' and diagnostics."
             ),
             input_model=S.PapersSearchRequest,
             handler=_papers_search,
             examples=[
-                'cf.papers.search {"session_id": "cf_1a2b3c4d5e"}',
-                'cf.papers.search {"session_id": "cf_1a2b", "queries": ["factual alignment"], "limit": 50}',
+                'cf.papers.search {"session_id": "cf_1a2b", "queries": ["factual alignment"], "engine": "s2"}',
+                'cf.papers.search {"session_id": "cf_1a2b", "queries": ["knowledge editing"], "engine": "openalex", "limit": 50}',
             ],
         ),
         CiteFlowTool(
@@ -1114,13 +1196,17 @@ TOOLS: Dict[str, CiteFlowTool] = {
         CiteFlowTool(
             name="cf.citations.expand_refs_guided",
             description=(
-                "Backward expansion. Walks the co-cited works best-first and pulls "
-                "references from the store papers citing them, ordered by original "
-                "search rank, until max_citing_papers is reached."
+                "Backward expansion. Fetches full reference lists from selected store "
+                "papers. Pass source_ids to expand from specific papers (agent-selected); "
+                "omit to use the default search_rank-based selection from co-cited citing "
+                "papers."
             ),
             input_model=S.ExpandRefsGuidedRequest,
             handler=_expand_refs_guided,
-            examples=['cf.citations.expand_refs_guided {"session_id": "cf_1a2b3c4d5e"}'],
+            examples=[
+                'cf.citations.expand_refs_guided {"session_id": "cf_1a2b3c4d5e"}',
+                'cf.citations.expand_refs_guided {"session_id": "cf_1a2b", "source_ids": ["W123", "W456"]}',
+            ],
         ),
         CiteFlowTool(
             name="cf.seeds.select_refs",

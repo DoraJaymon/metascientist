@@ -3,6 +3,16 @@
 > 状态：核心算法链路已跑通，**未提交**（在 `main` 分支）。
 > 计划文档：`/home/dell/.claude/plans/warm-sleeping-toast.md`
 
+## 阅读入口（2026-08）
+
+给需要理解当前设计的队友，按下面顺序阅读：
+
+1. `metasci-skills/skills/metasci-citeflow/SKILL.md`：Agent-driven 的总原则与阶段边界。
+2. `references/query-search.md`、`references/backward-expansion.md`：当前正式的 Skill 配方。
+3. `references/forward-expansion.md`：已存在工具和实验脚本的使用方式；该阶段仍是实验性能力。
+4. 本文的文件地图与指标现状：实现边界、已知问题和实验结论。
+5. `metasci-universe/docs/curalib-citeflow.md`：CuraLib 如何保存候选、溯源并支撑排序。
+
 ## 一句话
 
 把 AcaDeepR 的 CiteFlow 深度检索算法，以「原子工具 + 可插拔配方」的形态复现到 metascientist，
@@ -111,8 +121,9 @@ GT=2 时 recall@100 在 0/0.5 间跳变，噪声太大；GT=26 才能判断广�
   取不到元数据 → 进不了种子池。**成因未证实**（我曾说是"合并残留"，那个推断基于一次错误的
   `title.search` 模糊匹配，已撤回）。AcaDeepR 半年前的存档里同样是空壳记录，**旧项目也有，只是没报告过**。
   建议等能量化再决定修不修。
-- **skill 文件一个没写**。且旧 `metasci-skills/skills/metasci-deepsearch/SKILL.md` 的 description
-  自称 "the CiteFlow algorithm"，不处理会抢路由。
+- 新 `metasci-skills/skills/metasci-citeflow/` 已覆盖查询检索、反向扩展和实验性前向扩展说明。
+  尚未把前向扩展确立为默认自动流程；现有 benchmark 证据不足以证明它总会提高 top-K。
+  旧 `metasci-skills/skills/metasci-deepsearch/SKILL.md` 仍只作历史参照。
 - 旧 `metasci-deepsearch/` 仍在，作只读参照，最后删。
 
 ---
@@ -139,8 +150,7 @@ GT=2 时 recall@100 在 0/0.5 间跳变，噪声太大；GT=26 才能判断广�
 
 1. semantic_144 跑循环前后对比 → 判断前向扩展价值（**最要紧**）
 2. 按结论调 profile 或排序权重；semantic_187 试放宽年份
-3. 写 skill：`metasci-skills/skills/metasci-citeflow/`
-   （`references/recipes/citeflow-faithful.md` + `adaptive-expand.md`、`profiles.md`、`signals.md`），
-   更新 `metasci-skills/AGENTS.md` 路由，退休 deepsearch skill
+3. 将实验性前向扩展从“人工遵循配方”收敛为可验证的 Agent workflow，
+   再决定是否更新路由并退休 deepsearch skill
 4. Phase 4 三套权重对比排序 + `cf.run.manifest`/`cf.run.compare` 实验工具
 5. 提交（先开分支，`main` 是默认分支）

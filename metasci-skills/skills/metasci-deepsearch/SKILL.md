@@ -1,11 +1,8 @@
 ---
 name: metasci-deepsearch
 description: >
-  Deep academic paper discovery using the CiteFlow algorithm. Use when the user wants to find
-  relevant papers for a research question, build a literature collection, identify seminal works,
-  or explore a research topic beyond simple keyword search. Combines iterative keyword search
-  (Semantic Scholar) with citation network expansion (OpenAlex) to achieve broad, high-recall
-  coverage. Requires OPENAI_API_KEY, OPENAI_BASE_URL, and OPENALEX_EMAIL env vars.
+  [ARCHIVED] Replaced by metasci-citeflow skill system.
+  Legacy recipe-based deep search with fixed pipeline. Kept for reference only.
 allowed-tools:
   - Bash(python *)
   - Bash(metasci tools *)

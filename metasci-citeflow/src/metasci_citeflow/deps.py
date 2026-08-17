@@ -12,7 +12,17 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Protocol, Sequence, Tuple
+
+from dotenv import load_dotenv
+
+# Providers below read credentials via ``os.getenv`` with no dotenv call of their own,
+# so callers used to need their own ``load_dotenv(REPO / ".env")`` before touching any
+# cf.* tool (see dev_scripts/citeflow_scireasoning.py). Loading it once here, keyed off
+# this file's location rather than cwd, means every entry point gets it for free.
+_REPO_ENV = Path(__file__).resolve().parents[3] / ".env"
+load_dotenv(_REPO_ENV)
 
 
 class LLMClient(Protocol):
